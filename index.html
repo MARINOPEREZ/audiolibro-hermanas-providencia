@@ -726,23 +726,39 @@ async function fetchTexto(url){
 }
 async function prepararTTS(){
   if (MESPEAK && LAMEJS) return;
-  $('stAudio').textContent = '⬇ Descargando motor de voz (solo la primera vez, ~2 MB)…';
-  var base = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.2';
-  if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
-  LAMEJS = window.lamejs;
-  var esp = evalCJS(await fetchTexto(base + '/src/ESpeak.js'), {});
-  MESPEAK = evalCJS(await fetchTexto(base + '/src/index.js'), {'./ESpeak.js': esp});
-  MESPEAK.loadConfig(JSON.parse(await fetchTexto(base + '/src/mespeak_config.json')));
-  MESPEAK.loadVoice(JSON.parse(await fetchTexto(base + '/voices/es-la.json')));
+  var etapa = 'descarga del codificador MP3';
+  try {
+    $('stAudio').textContent = '⬇ Descargando motor de voz (solo la primera vez, ~2 MB)…';
+    var base = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.2';
+    if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+    LAMEJS = window.lamejs;
+    etapa = 'carga del núcleo de voz (ESpeak.js)';
+    var esp = evalCJS(await fetchTexto(base + '/src/ESpeak.js'), {});
+    etapa = 'carga del núcleo de voz (index.js)';
+    MESPEAK = evalCJS(await fetchTexto(base + '/src/index.js'), {'./ESpeak.js': esp});
+    etapa = 'carga de configuración de voz';
+    MESPEAK.loadConfig(JSON.parse(await fetchTexto(base + '/src/mespeak_config.json')));
+    etapa = 'carga de la voz en español';
+    MESPEAK.loadVoice(JSON.parse(await fetchTexto(base + '/voices/es-la.json')));
+  } catch(eTTS){
+    MESPEAK = null;
+    throw new Error('[' + etapa + '] ' + (eTTS && eTTS.message ? eTTS.message : eTTS));
+  }
 }
 function wavAPcm(u8){
+  if (!u8 || !u8.byteLength || u8.byteLength < 44) throw new Error('el motor de voz no devolvió audio válido (respuesta vacía o demasiado corta)');
   var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   var sr = dv.getUint32(24, true);
   var off = 12;
   while (off < u8.length - 8){
     var id = String.fromCharCode(u8[off], u8[off+1], u8[off+2], u8[off+3]);
     var sz = dv.getUint32(off + 4, true);
-    if (id === 'data') return {pcm: new Int16Array(u8.buffer, u8.byteOffset + off + 8, sz >> 1), sr: sr};
+    if (id === 'data'){
+      var disponible = u8.byteLength - (off + 8);
+      var szSeguro = Math.max(0, Math.min(sz, disponible));
+      if (szSeguro < 4) throw new Error('el motor de voz devolvió un audio corrupto (bloque de datos WAV inválido)');
+      return {pcm: new Int16Array(u8.buffer, u8.byteOffset + off + 8, szSeguro >> 1), sr: sr};
+    }
     off += 8 + sz + (sz % 2);
   }
   throw new Error('WAV sin bloque de datos');
@@ -1007,20 +1023,28 @@ async function construirPPTX(JSZipRef, items){
 
 /* =================== PESTAÑA PPT: flujo =================== */
 function sintetizarMp3Texto(texto){
-  var raw = MESPEAK.speak(texto, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
-  if (!raw) raw = MESPEAK.speak(texto, {rawdata: true, voice: 'es-la', speed: 150});
-  var d = wavAPcm(new Uint8Array(raw));
-  var enc = new LAMEJS.Mp3Encoder(1, d.sr, 64);
-  var parts = [], total = 0;
-  for (var j = 0; j < d.pcm.length; j += 1152){
-    var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
-    if (b.length){ parts.push(b); total += b.length; }
+  var etapa = 'síntesis de voz';
+  try {
+    var raw = MESPEAK.speak(texto, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
+    if (!raw) raw = MESPEAK.speak(texto, {rawdata: true, voice: 'es-la', speed: 150});
+    if (!raw) throw new Error('el motor de voz no generó audio para este texto');
+    etapa = 'conversión de audio a PCM';
+    var d = wavAPcm(new Uint8Array(raw));
+    etapa = 'codificación a MP3';
+    var enc = new LAMEJS.Mp3Encoder(1, d.sr, 64);
+    var parts = [], total = 0;
+    for (var j = 0; j < d.pcm.length; j += 1152){
+      var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
+      if (b.length){ parts.push(b); total += b.length; }
+    }
+    var f = enc.flush();
+    if (f.length){ parts.push(f); total += f.length; }
+    var u8 = new Uint8Array(total), off = 0;
+    for (var k = 0; k < parts.length; k++){ u8.set(parts[k], off); off += parts[k].length; }
+    return {u8: u8, durMs: Math.max(500, Math.round(d.pcm.length / d.sr * 1000))};
+  } catch(eSyn){
+    throw new Error('[' + etapa + '] ' + (eSyn && eSyn.message ? eSyn.message : eSyn));
   }
-  var f = enc.flush();
-  if (f.length){ parts.push(f); total += f.length; }
-  var u8 = new Uint8Array(total), off = 0;
-  for (var k = 0; k < parts.length; k++){ u8.set(parts[k], off); off += parts[k].length; }
-  return {u8: u8, durMs: Math.max(500, Math.round(d.pcm.length / d.sr * 1000))};
 }
 function durAudioArchivo(file){
   return new Promise(function(res){
