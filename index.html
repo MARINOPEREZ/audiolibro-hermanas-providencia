@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audiolibro y PDF de libros</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #faf8f5; color: #2d2a26; padding: 16px; }
+  h1 { font-size: 1.25rem; margin-bottom: 4px; }
+  .sub { color: #7a736a; font-size: .85rem; margin-bottom: 14px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab { padding: 8px 16px; border: 1px solid #d9d2c7; border-radius: 8px; background: #fff; cursor: pointer; font-size: .9rem; }
+  .tab.active { background: #8b5e3c; color: #fff; border-color: #8b5e3c; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: #fff; border: 1px solid #e5ded3; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { padding: 8px 14px; border: 1px solid #d9d2c7; border-radius: 8px; background: #fff; cursor: pointer; font-size: .9rem; }
+  button.primary { background: #8b5e3c; color: #fff; border-color: #8b5e3c; }
+  button:disabled { opacity: .45; cursor: default; }
+  select, input[type=range], input[type=text] { padding: 6px; border: 1px solid #d9d2c7; border-radius: 6px; background: #fff; max-width: 260px; }
+  label { font-size: .82rem; color: #7a736a; }
+  #texto { margin-top: 12px; max-height: 46vh; overflow-y: auto; border: 1px solid #e5ded3; border-radius: 10px; padding: 14px; background: #fff; line-height: 1.55; font-size: .95rem; }
+  #texto p { margin-bottom: 10px; cursor: pointer; border-radius: 6px; padding: 3px 6px; }
+  #texto p:hover { background: #f3ede4; }
+  #texto p.hablando { background: #f0e2d3; outline: 1px solid #d4b896; }
+  #texto h3 { margin: 14px 0 8px; color: #8b5e3c; font-size: 1rem; }
+  .drop { border: 2px dashed #cfc4b4; border-radius: 10px; padding: 26px; text-align: center; color: #7a736a; cursor: pointer; }
+  .drop.over { background: #f3ede4; border-color: #8b5e3c; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .thumb { border: 1px solid #e5ded3; border-radius: 8px; background: #fff; padding: 6px; text-align: center; }
+  .thumb img { width: 100%; height: 110px; object-fit: contain; background: #f6f2ec; border-radius: 4px; }
+  .thumb .n { font-size: .75rem; color: #7a736a; margin: 4px 0; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thumb .btns { display: flex; justify-content: center; gap: 4px; }
+  .thumb .btns button { padding: 2px 7px; font-size: .8rem; }
+  .badge { display: inline-block; background: #ede4d6; border-radius: 20px; padding: 2px 10px; font-size: .75rem; color: #6b5236; margin-left: 6px; }
+  .status { font-size: .85rem; color: #7a736a; margin-top: 8px; }
+  .nota { font-size: .8rem; color: #8a8378; background: #f6f1e8; border-radius: 8px; padding: 8px 10px; margin-top: 10px; }
+  #linkPDF { display: none; margin-top: 10px; color: #8b5e3c; font-weight: 600; font-size: .92rem; }
+  #errbar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #b3261e; color: #fff; font-size: 12px; padding: 6px 12px; z-index: 999; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="errbar"></div>
+<h1>📖 Audiolibro y PDF de libros</h1>
+<div class="sub">Escucha el libro con voz natural y convierte fotos de páginas en un PDF ordenado. <span style="color:#b3a68f">· versión 13 · GitHub ·</span></div>
+
+<div class="tabs">
+  <div class="tab active" data-p="audio">🎧 Audiolibro</div>
+  <div class="tab" data-p="pdf">📄 Imágenes → PDF</div>
+</div>
+
+<!-- ============ AUDIOLIBRO ============ -->
+<div class="panel active" id="p-audio">
+  <div class="card">
+    <div class="controls">
+      <button class="primary" id="btnPlay">▶ Reproducir</button>
+      <button id="btnPause" disabled>⏸ Pausa</button>
+      <button id="btnStop" disabled>⏹ Detener</button>
+      <label>Voz: <select id="selVoz"></select></label>
+      <label>Velocidad: <input type="range" id="rate" min="0.6" max="1.4" step="0.05" value="1" style="width:90px;vertical-align:middle"> <span id="rateVal">1.00</span></label>
+    </div>
+    <div class="controls" style="margin-top:8px">
+      <label>📖 Libro: <select id="selLibro"><option value="NONE">— Selecciona un libro —</option><option value="EMBED">EL PROYECTO de las Hermanas de la Providencia</option></select></label>
+      <button id="btnMp3Gen" title="Descarga el MP3 del libro (usa la voz de Windows si ya fue creada)">⬇ Descargar MP3</button>
+      <button id="btnPPT" title="Crea una presentación PowerPoint narrada: una diapositiva por página, avanza al ritmo de la lectura">🎞 Generar PPT</button>
+    </div>
+    <div class="status" id="stModo">⏳ Verificando conexión con Cowork…</div>
+    <div class="status" id="stAudio">Haz clic en cualquier párrafo para comenzar a leer desde ahí.</div>
+    <div class="nota">💡 Se priorizan voces en <b>español de Colombia (es-CO)</b> si están instaladas en tu equipo (Configuración → Hora e idioma → Voz). Los libros nuevos entran por la pestaña <b>"Imágenes → PDF"</b>: al generar el PDF, su transcripción se crea sola (OCR en español) y el libro queda listo para escuchar aquí. Con <b>🎤 Generar MP3</b> creas su audio exportable. Funciona tanto en Cowork como abriendo este archivo en tu navegador con internet: PDF, transcripción y MP3, todo autónomo. Para que <b>⬇ Descargar MP3</b> suene con la <b>voz de Windows (Helena)</b>: una sola vez por libro, arrastra su .txt sobre «Crear MP3 con voz de Windows.bat» (en LIBROS); desde entonces el botón entrega esa versión automáticamente.</div>
+  </div>
+  <div id="texto"></div>
+</div>
+
+<!-- ============ PDF ============ -->
+<div class="panel" id="p-pdf">
+  <div class="card">
+    <div class="drop" id="drop">📷 Haz clic o arrastra aquí las imágenes de las páginas (JPG/PNG).<br><small>Se ordenan automáticamente por nombre de archivo. Luego puedes moverlas o girarlas.</small></div>
+    <input type="file" id="fileIn" accept="image/*" multiple style="display:none">
+    <div class="controls" style="margin-top:10px">
+      <label>Nombre: <input type="text" id="pdfNombre" value="libro" style="width:170px"></label>
+      <button class="primary" id="btnPDF" disabled>⚙ Generar PDF</button>
+      <button id="btnGirarTodo" disabled>↻ Girar todas 90°</button>
+      <button id="btnLimpiar" disabled>🗑 Quitar todas</button>
+      <span class="badge" id="cnt">0 imágenes</span>
+    </div>
+    <div class="status" id="stPdf"></div>
+    <a id="linkPDF" href="#">⬇ Descargar PDF</a>
+    <a id="linkTXT" href="#" style="display:none;margin-top:6px;margin-left:14px;color:#8b5e3c;font-weight:600;font-size:.92rem">⬇ Descargar transcripción (.txt)</a>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<script>
+/* Registro de errores en un script separado: sobrevive aunque el script principal falle */
+window.onerror = function(msg, src, line){
+  var b = document.getElementById('errbar');
+  if (b){ b.style.display = 'block'; b.textContent = '⚠ Error interno: ' + msg + (line ? ' (línea ' + line + ')' : ''); }
+  return false;
+};
+</script>
+
+<script>
+'use strict';
+/* =================== UTILIDADES =================== */
+function $(id){ return document.getElementById(id); }
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+/* =================== LIBRO EMBEBIDO =================== */
+var LIBRO = [
+ ["h","EL PROYECTO de las Hermanas de la Providencia"],
+ ["p","Juan Martín Moye, 1730 a 1793."],
+ ["p","«Enviar mujeres jóvenes sin otros fondos que la Providencia, con la persuasión de que jamás faltará a quienes se abandonan en ella con confianza. He ahí el proyecto.»"],
+ ["p","«Ruego al Señor que bendiga a las Hermanas, que las haga crecer y multiplicarse tanto en virtud como en número. Pero yo mismo soy el primero en pedir que en el momento en que pierdan el espíritu de su condición, Dios las elimine, y la Providencia se procure otras Hermanas según su voluntad para reemplazarlas.»"],
+ ["h","Presentación"],
+ ["p","Los extractos del Directorio que proponemos en este fascículo tienen como objeto suscitar y sostener la oración y la meditación. Están tomados del Proyecto, un escrito de génesis que se impone como el texto clave pues contiene la esencia de la inspiración carismática de Juan Martín Moye."],
+ ["p","Aunque el Proyecto comprende dos partes, aquí sólo reproducimos la primera parte de este importante documento, esencial en el pensamiento del Fundador, pues trata del ser de las Hermanas, mientras que la segunda se refiere a su actuar."],
+ ["p","Nos pareció oportuno añadir la página que expresa, en un resumen sorprendentemente lúcido, el riesgo en la vida de la Hermana de la Providencia, y que interpela hoy tanto como cuestionaba antaño."],
+ ["p","Se incluye también, al final, una oración a la Providencia, redactada por Juan Martín Moye para su Colección de Prácticas de Piedad de 1767, que aunque no fue compuesta especialmente para las Hermanas, nos ayudará a unirnos en una fórmula común."],
+ ["p","Capítulo General. Maredret, en la fiesta de la Transfiguración. Agosto de 1976."],
+ ["h","Proyecto de las Escuelas para el Campo de las Hermanas llamadas de la Providencia"],
+ ["p","Cor unum et anima una. Hechos 4, 32."],
+ ["h","El orden conduce a Dios"],
+ ["p","Se había pensado enviar primero algunas jóvenes a Toul, para prepararse en el seminario que fundó allí un venerable canónigo con la intención de formar maestras de escuela; pero como todas las jóvenes que salen de esa institución deben tener una renta asegurada, encontré en ello dos inconvenientes para nosotros."],
+ ["p","Uno fue que los fondos eran difíciles de obtener, y la necesidad de tenerlos para establecer las maestras de escuela reduciría su número y pondría a los lugares pobres, donde ellas están siendo más necesitadas, en la imposibilidad de recibirlas. Además, la pensión que se exige en Toul a las jóvenes pobres que estarían en condición de enseñar, obstaculizaría aún más el medio para ser admitidas en nuestro proyecto."],
+ ["p","El otro inconveniente fue que, al tener una renta fija, sería de temer que algunas de esas jóvenes abrazaran este estado por interés, a fin de tener una posición estable y de qué vivir el resto de sus días, en lugar de hacerlo por el deseo sincero de procurar la gloria de Dios y la santificación de los niños que les serán confiados, lo que trastornaría la obra de Dios en lugar de establecerla."],
+ ["p","Era pues mejor enviar esas jóvenes a todas partes donde las pidieran, sin otros fondos que la Providencia, con la persuasión de que jamás faltará a quienes se abandonan en ella con confianza. Se propusieron estas razones a los superiores, que las aceptaron."],
+ ["p","He ahí el proyecto. Si es según la voluntad de Dios, tendrá éxito; si no es conforme a ella, yo mismo pido que sea destruido y aniquilado. Sin embargo, tengo ya varias razones para creer que el proyecto viene de Dios, y una de ellas es que varias almas buenas se interesan por él y rezan para que tenga éxito."],
+ ["p","Conjuro entonces a todos los que conozcan el proyecto que hagan lo mismo y pidan: primero, que mis pecados y las faltas que yo podría cometer en la ejecución de esta obra, no sean obstáculos para las miras y los designios de la bondad y la misericordia de Dios; y segundo, que la Providencia conduzca todo en este asunto, que aleje o venza los obstáculos que la malicia de los seres humanos o el furor de los espíritus del mal podrían suscitar para detener su ejecución; que disponga todo para que tenga éxito; que secunde mis actividades; que lleve todo a feliz término."],
+ ["p","En una palabra, que la Providencia haga todo, por la vía que le plazca; que todo suceda según las intenciones de Dios; que Dios mismo comience la obra, la acabe y la perfeccione. Sin esto, todos nuestros esfuerzos serían vanos e inútiles, según estas palabras del salmista: «Si el Señor no construye él mismo la casa, en vano trabajan los que la construyen. Si el Señor no guarda la ciudad, en vano vigila la guardia». Salmo 127."],
+ ["h","Cualidades necesarias en las jóvenes que se destinan a este estado"],
+ ["p","Puesto que las jóvenes que quieran entrar en este proyecto no pueden esperar ningún beneficio temporal, sino contar con toda clase de penas y de adversidades, es menester que estén dispuestas a soportar el hambre y la sed, cuando la Providencia, para probarlas, permita que les falte lo necesario. Dispuestas a ser despedidas y caer en desgracia, si desagradan a las personas a donde van; dispuestas a sufrir toda clase de groserías de parte de los niños, ingratitudes y críticas de parte de los padres, reprensiones severas de los curas y vicarios, y muchos otros motivos de aflicción que no se pueden prever."],
+ ["p","Deben estar también en disposición de dejar todo lo que sería consolador para ellas en la ciudad, las devociones que practican, las ocasiones que se celebran con pompa, los confesores que encuentran allí a su elección, para tomar el que la Providencia les dé."],
+ ["p","La mayoría de la gente las considerarán locas o insensatas. Es necesario que tomen la resolución de separarse de la sociedad y de la frecuentación de sus amigas más queridas, para vivir en adelante sólo con gente grosera e ignorante."],
+ ["p","El 25 de enero de 1764 hicimos el proyecto de un establecimiento para una aldea donde los animales duermen en el mismo lugar que las personas, donde el más rico a veces tiene que pedir, y donde los viejos ignoran los principales misterios de la religión y apenas saben que hay un Dios. Se puede pues juzgar por esto lo que deben esperar las que se proponen entrar en este proyecto."],
+ ["p","No creo que algunas jóvenes a quienes agradan los proyectos porque son nuevos y extraordinarios, se presenten para éste, en el primer impulso de una solicitud puramente humana y movidas por un fervor imaginario y presuntuoso. Quiera Dios alejar tales personas. Y como sólo espero de la divina Providencia, confío habrá de enviarnos jóvenes que tengan las cualidades necesarias para cumplir los designios de su misericordia con esa juventud campesina abandonada y sumida en la ignorancia."],
+ ["p","Para el proyecto que acabo de exponer se necesitan: Jóvenes que no busquen sino la mayor gloria de Dios, sin ningún interés, puesto que lejos de aspirar a sueldos o pensiones fijas, deberán consagrar lo que tienen como propio, dinero, muebles, a esta buena obra, para extirpar toda avaricia y búsqueda de sí, a ejemplo de San Pablo que predicaba con sus propios recursos."],
+ ["p","Jóvenes fervorosas que se entreguen por entero a la salvación de las pobres niñas que les serán confiadas, de modo que estén dispuestas a soportar toda clase de trabajos para tal fin. Jóvenes sobrias y mortificadas, capaces de contentarse con una comida mezquina, tal como se encuentra en el campo."],
+ ["p","Jóvenes desprendidas de todo, listas a renunciar a todo, a dejar todo lo que podría retenerlas en la ciudad, para vivir en una aldea, privadas de todo consuelo humano, sin tener otra ocupación que hacer la voluntad de Dios."],
+ ["p","Jóvenes de una virtud probada, y no las que están animadas por un primer fervor, porque este primer entusiasmo a menudo se debilita y falla cuando la calma y el consuelo que encontraban antes en la piedad van dejando de sentirse e incluso se tornan en hastío y desilusión. Entonces, estas personas regresan al mundo que habían dejado, para buscar allí con qué resarcirse de lo que no encuentran más en el servicio de Dios. Por otra parte, las personas que están poseídas por este fervor inicial pueden fácilmente incurrir en excesos e imprudencia y comprometer a quienes están bajo su dirección."],
+ ["p","Se necesitan personas maduras, prudentes, que cuando se entreguen a algo sea después de un examen serio; se necesitan personas que hayan pasado por toda clase de estados de devoción y de indiferencia; personas que sepan soportar la privación de todo consuelo divino y humano; personas de experiencia, para señalar a las otras las faltas que cometieron, precaverlas contra los peligros que corrieron, y hacerles evitar las malas costumbres y los extravíos en los cuales cayeron ellas mismas."],
+ ["p","He ahí, más o menos, las cualidades que deben tener estas jóvenes. Al menos deben estar en la disposición de adquirirlas, y tener en el corazón el germen y el principio de ellas. Ruego al Señor que nos las envíe. Que las forme él mismo con su gracia y que les proporcione talento y capacidad en los lugares donde las destine."],
+ ["p","El Evangelio anota que Jesucristo comenzó a orar y a instruir, es decir, que comenzó por predicar con el ejemplo, y después con la palabra; comenzó por practicar él mismo lo que enseñaba a los demás. Del mismo modo, las personas que piensan instruir a la juventud deben, ante todo, santificarse a sí mismas antes que trabajar para santificar a los otros; deben llenarse de las verdades de la religión para comunicarlas a los otros, porque si enseñan estas verdades sin estar penetradas de ellas, no hacen impresión alguna en el corazón de aquellos a quienes hablan. Para inspirar la piedad y la virtud, hay que poseerlas. Veamos pues, en primer lugar, cómo deben comportarse ellas mismas; enseguida veremos cómo deben comportarse con relación a las niñas a quienes tendrán que enseñar."],
+ ["h","La conducta que las Hermanas deben tener con relación a ellas mismas"],
+ ["p","Deben considerarse todas como hermanas, porque teniendo todas el mismo padre que es Dios, y la misma herencia que es el cielo, deben, a ejemplo de los primeros cristianos, tener sólo un corazón y una sola alma; y también porque tienen el mismo oficio, las mismas miras, las mismas intenciones. Espero pues que se considerarán y se tratarán como verdaderas hermanas, tomando parte cada una en las necesidades y en las penas de las otras. Las que tengan, den a las que no tengan. Todo será común entre ustedes como entre los primeros fieles."],
+ ["p","Cuando se les dirija la palabra quiero que se las llame, no «mi querida Hermana», ni «Hermana», sino «mi pobre Hermana», para que este apelativo les inspire un vivo sentimiento de humildad sobre nuestra pobreza material y espiritual, haciéndolas reflexionar: «Ciertamente, soy muy poco delante de Dios, estoy desprovista de virtudes y de méritos, y sujeta a mil pasiones y mil defectos»."],
+ ["p","Las consagro al Niño Jesús. Tengan una gran devoción a su divina infancia; hónrenla con toda clase de prácticas; repitan a menudo las letanías del Santo Niño, compuestas por el cardenal Berulle, repitiendo estas palabras: «Niño Jesús, salvación de los niños»."],
+ ["p","Que los niños con quienes ustedes están les recuerden sin cesar las humillaciones del Salvador que quiso reducirse a la pequeñez por amor nuestro, llorando como un niño. Inspiren la misma devoción a sus alumnos, hablándoles a menudo del Niño Jesús y propónganselo como objeto de su adoración, de su amor y de su imitación. Pídanle a menudo que derrame sobre los alumnos de cada una las gracias y los méritos que nos alcanzó por las humillaciones profundas de su divina infancia. Conságrenle mil veces, como lo he hecho yo, todos los niños que les sean confiados."],
+ ["h","De las virtudes esenciales a las Hermanas"],
+ ["p","Las principales virtudes que ustedes deben practicar son: el abandono en la divina Providencia, la pobreza, la sencillez y la caridad. Estas son las virtudes fundamentales de vuestro establecimiento."],
+ ["h","El Abandono en la Providencia"],
+ ["p","Es fácil ver cuán necesario es abandonarse sin reserva en la divina Providencia y no apoyarse sino en ella, puesto que ustedes no tienen ninguna renta asegurada por parte de los seres humanos. Esperarán pues todo de Dios, el alimento y el vestido, la salud y la fuerza, los talentos, todo en una palabra. Cuando personas caritativas les den ayuda, bendigan la Providencia, persuadidas de que ella las envía para ayudarles. Cuando les falte lo necesario, lejos de murmurar contra la divina Providencia, la adorarán, pensando que ella conoce todas las miras y los designios de ustedes. Dirán como Job: «Si hemos recibido los bienes de manos del Señor, ¿por qué no recibir de ella los males?», con la misma disposición de conformidad a su voluntad."],
+ ["p","Es para hacerlas depender totalmente de esta amable Providencia por lo que no he querido, mis pobres Hermanas, que tengan pagos ni rentas, sino que vivan confiadas en la Providencia. Estarán más seguras y más sólidamente establecidas si depositan en ella su confianza que si tuvieran todos los fondos y todos los bienes del mundo. Pero si una sola vez dejan de confiarse a Dios y buscan el apoyo y la protección de los seres humanos, Dios las abandonará, y caerán en el momento mismo en que se crean más seguras. Mientras actúen con la rectitud, la sencillez del Evangelio, teniendo presente sólo a Dios, contando sólo con Dios, Él las sostendrá contra todos los esfuerzos humanos. Pero si emplean los medios de una política humana, Él permitirá que esta prudencia de la carne sea la causa que las arruine."],
+ ["p","Si se abandonan en la Providencia con confianza, con una confianza entera y sin reserva, estén persuadidas de que ella no les faltará; ella proveerá abundantemente a las necesidades de ustedes y tendrán aun más de lo necesario. Si para probarlas permite que estén en la indigencia, no es que ella no vele por ustedes con tanto cuidado y atención como en cualquier otro tiempo. Adoren sus designios sin conocerlos. Recuerden a menudo estas palabras del Señor: «No se inquieten diciendo: ¿Qué comeremos? El Padre celestial sabe que ustedes necesitan todas estas cosas». Estas pocas palabras bastarán para desterrar toda inquietud y recordarles los motivos de confianza más capaces de tranquilizarlas perfectamente acerca del porvenir."],
+ ["p","Dios conoce todas las necesidades de ustedes, puesto que lo sabe todo; puede proveer a todas ellas, pues es todopoderoso; lo quiere, pues es nuestro Padre y nos ama como a sus hijos. ¿De qué pueden inquietarse entonces? Mis pobres Hermanas, si tuviéramos fe y confianza en Dios, veríamos hoy como en otros tiempos los prodigios y las maravillas de su omnipotencia; pero si no nos los revela, es porque nuestra poca fe se lo impide. Creamos pues, y pidamos al Señor que aumente nuestra fe."],
+ ["p","Todas las personas que tienen una firme confianza en la Providencia notan a cada instante sus efectos sensibles; ven claramente que la Providencia gobierna todo, ven que dispone de todo y que nada sucede sin su participación. No cae ni un cabello de nuestra cabeza sin una orden de la Providencia. Ella alimenta los pájaros del cielo, reviste de lirios el campo, ella alimentará también a mis pobres Hermanas. Entréguenle todo, confíenle sin reserva el cuidado del cuerpo, del alma, de la salud, de la reputación, de la vida, sobre todo de la salvación de ustedes y de los niños que les sean confiados. Digan como David: «Señor, mi cuerpo está en tus manos», o como San Pablo: «Sé en quién me he confiado y descanso enteramente en él»."],
+ ["p","Santa Teresa cuenta en la historia de sus fundaciones la manera admirable como se establecieron, no solamente sin ningún socorro humano sino, a menudo, a pesar de toda clase de oposiciones de parte de los seres humanos. En todas las penas y dificultades que se les presentaban, se notaba que poco a poco, y algunas veces en un solo momento, todos los obstáculos se desvanecían y el establecimiento se hacía en el tiempo que menos se esperaba. A menudo, cuando las cosas eran más desesperadas, la Providencia hacía surgir recursos con los cuales nadie hubiera podido contar."],
+ ["p","Ha sucedido siempre lo mismo en las obras de Dios. Él sabe hacerlas triunfar y las juzga convenientemente, las sostiene por medios del todo contrarios a los de la prudencia de los tiempos, mientras que los establecimientos que son fundados sólo con medios humanos, fallan a menudo por el lugar mismo por donde parecían más firmes. Vean la orden que fundó San Francisco de Asís sin tener fondos. Vean cómo se ha sostenido esta orden por un puro efecto de la Providencia. Lo mismo será para el establecimiento de ustedes. Si es según las miras y los designios de Dios, Él lo hará triunfar; no lo dudemos. En cuanto a mí, espero todo de la Providencia; no tengo confianza sino en ella; no tengo recurso alguno asegurado de parte de los seres humanos."],
+ ["p","Una persona a quien hablaba de mi proyecto, viendo las empresas que yo proyectaba, estaba persuadida de que tenía que comenzarlas todas; aunque no podía quitarse del espíritu que no hubiera temeridad solamente en atreverme a pensar en ellas. Hay incluso quienes me acusan de imprudencia y de locura. Pero esto no me alarma en absoluto porque toda mi esperanza está en Dios y tengo la firme confianza de que Él sabrá conducir esta obra, si es suya."],
+ ["p","O este proyecto está de acuerdo con la voluntad de Dios, o no; si es conforme a su santa voluntad, Él es todopoderoso, tiene mil medios, mil recursos para realizarlo. Si no es según el beneplácito de Dios, renuncio a él desde este momento, y desde que sepa que Dios no quiere que trabaje en su ejecución, abandonaré con gusto toda empresa. Así es como debemos obrar en todas las cosas en las cuales la voluntad de Dios no nos es manifestamente declarada. No debemos obstinarnos en nada, sino conservarnos en una santa indiferencia, no queriendo ni una cosa ni la otra, sino en cuanto haya lugar para creer que es por beneplácito de Dios. No olviden esta máxima, mis pobres Hermanas, que ella les servirá en muchas ocasiones, y con esa santa indiferencia, esa perfecta conformidad a la voluntad de Dios, conservarán siempre la paz del corazón."],
+ ["p","Es también muy necesario hacerles notar que para vivir en esa completa dependencia en la Providencia, no se debe tratar de detenerla ni de adelantársele por precipitación, hay, por el contrario, que esperar con paciencia sus órdenes, que se conocen, cuando se tiene un poco de experiencia con esta vida de providencia, por acontecimientos que nos manifiestan la voluntad de Dios. Debemos permanecer tranquilos, o a lo sumo hacer alguna tentativa para ver si la voluntad de Dios dispone todo, no solamente las cosas sino las horas y los momentos en que deben suceder, según estas palabras del Salvador: «Nadie sabe el lugar y los momentos que mi Padre tiene en su poder». Mientras que la hora de la muerte de nuestro Señor no había llegado, sus enemigos lo buscaban para hacerle morir, pero todos sus esfuerzos eran vanos; y cuando llegó su hora, Él mismo se presentó ante los que venían a apresarlo."],
+ ["p","Dios mío, cuántas cosas hacemos por imaginación, por apresuramiento. Traten pues de reprimir y calmar la imaginación. Cuando alguna idea las inquiete, desconfíen de ella, renuncien a ella y entren en la calma y en la paz. No tomen nunca decisiones en la turbación."],
+ ["p","El Salvador nos dice también en el Evangelio que a cada día le basta su mal, y que no debemos pensar en el mañana. Esto no impide que se hagan las provisiones a tiempo. Es el orden de la Providencia recoger el trigo en el tiempo de la cosecha. Esto tampoco impide que cuando les falte lo necesario, puedan buscarlo en alguna parte. Expongan primero su necesidad a los señores curas y a otras personas caritativas. Es seguir la Providencia recibir los recursos que ella presenta."],
+ ["p","Mientras sigan estos principios, que son los del Evangelio, estarán seguras, y estén persuadidas de que nunca les faltará lo necesario; pero si les llegare a faltar, la Providencia sabrá muy bien suplir por otros medios. Dios mismo las sostendrá con su gracia. Él las consolará en sus necesidades, y estarán más contentas en la pobreza que los ricos en medio de la abundancia. Santa Teresa asegura, con la mayor consolación, que sus hijas nunca estaban tan contentas como cuando les faltaba todo. Es así como las promesas de Dios se cumplen de una manera o de otra."],
+ ["p","Dios nos promete cuidar de nosotros. Él asegura mil veces en la Escritura que a quien deposite en Él su confianza, no le faltará nada. Esto no quiere decir, absolutamente, que se tendrá siempre lo temporal en abundancia, puesto que los santos, que tenían la mayor confianza, estuvieron a menudo desprovistos de todo. Pero Dios suplirá por otros medios, sea sosteniéndonos por sí mismo, sea bendiciendo lo poco que tenemos, de modo que pueda bastarnos. Él actuará en esto según su beneplácito; pero es cierto que lo hará, puesto que lo ha prometido."],
+ ["p","Cuán poca fe tienen los seres humanos. Se aseguran con un contrato hecho en forma y ante notario, y dudan de la palabra de Dios, escrita en los Libros Santos, cuya autenticidad es indudable. Yo no soy sino un pobre pecador; tengo sin embargo una gran confianza en Dios; he visto ya tantos efectos de su divina Providencia que sería un ingrato si no me abandonara en ella sin reserva. En este asunto mismo, el Proyecto, he reconocido muchos signos de la Providencia que me dan un presentimiento interior de que está de acuerdo con la voluntad de Dios y que tendrá éxito; pero no es tiempo aún de manifestarlos."],
+ ["p","Sea lo que fuere, uno de mis principios es que cuando se presente una buena obra por hacer, y se está moralmente seguro de que es la voluntad de Dios hacerla, podemos atrevernos a emprenderla, aunque no se vean, en el presente, los medios de los cuales uno podrá servirse para llevarla a término. Uno debe ser siempre probado."],
+ ["h","La Pobreza"],
+ ["p","Ruego a Dios, mis pobres Hermanas, que quiera inspirarnos un santo afecto por la pobreza evangélica. Acuérdense que el Señor hizo de ella una bienaventuranza cuando dijo en el Evangelio: «Bienaventurados los pobres en espíritu». Jesucristo mismo fue pobre pues no tenía dónde descansar su cabeza. Los apóstoles, yendo en su seguimiento, también sufrieron algunas veces de hambre, y el Evangelio cuenta que para saciarla se vieron obligados un día a comer granos de trigo que tomaban de las espigas de los campos por donde pasaban. Y cuántas veces a nuestro Salvador le faltó lo necesario, en la extrema escasez de todo en que estaba."],
+ ["p","Es fácil concluir, de la pobreza de Jesús, cuál fue la pobreza de su santa Madre. Recuerden también el ejemplo de San Juan en el desierto, donde se alimentaba sólo de saltamontes y de miel silvestre; y de tantos solitarios que no vivían sino de raíces."],
+ ["p","Así, mis pobres Hermanas, estén contentas cuando no tengan sino pan y agua. Amen la pobreza del Salvador; hónrenla imitándola. Para esto, conténtense con una alimentación sencilla y ordinaria, tal como la de la gente del campo. No comerán otra carne que tocino y no tomarán vino sino en caso de enfermedad o de alguna dolencia."],
+ ["p","Igualmente, no tendrán ningún adorno en el cuarto; colocarán en él solamente un crucifijo o una cruz de madera, e imágenes propias para inspirar devoción, sobre todo imágenes donde estén representados los misterios del nacimiento, la vida y la pasión de Jesucristo, para hacerlos comprender más fácilmente a los niños. Explicándoles los misterios de la redención sobre todo, tendrán cuidado de hacerles considerar el crucifijo y de mostrarles en detalle todo lo que sufrió el divino Salvador."],
+ ["p","El vestido de ustedes será también pobre, de paño grueso, y la ropa blanca lo más sencilla posible. No tendrán hebillas en los zapatos sino solamente cordones de cuero; llevarán los vestidos viejos y remendados tanto como la conveniencia lo permita: todo esto para honrar la pobreza de Jesucristo y de la Santísima Virgen."],
+ ["p","Esto no impedirá sin embargo que tengan algunos animales, como una vaca, cerdos, gallinas, para encontrar en la casa las cosas necesarias a la vida y no estar a cargo de otros sino lo menos posible. Pero no tendrán sino lo que sea necesario para subsistir pobremente."],
+ ["h","La Sencillez"],
+ ["p","La Sencillez es una virtud que nos hace ir a Dios sinceramente, sin rodeos, sin disfraz, con una intención recta, sin otra intención que la de agradarle, y que nos hace obrar y hablar con el prójimo con rectitud, sin fraude y sin malicia."],
+ ["p","Esta virtud de la sencillez es tan estimable a los ojos de Dios que cuando la Escritura quiere hacernos el retrato de un justo según su corazón, nos hace notar que era «sencillo y recto». En estos términos habla del santo Job y de los otros grandes santos del Antiguo Testamento."],
+ ["p","Hay dos clases de sencillez: la una interior y la otra exterior. La interior consiste, como acabo de decirlo, en esa rectitud de intención que busca agradar a Dios, sin preocupación por lo que pensarán los seres humanos, y sin ningún interés por sí mismo; y la exterior consiste en actitudes y palabras sensatas, sin artificio y sin afectación ni vanidad. San Pedro habla de la sencillez cuando dice que debemos ser como niños, razonables, pero sin malicia."],
+ ["p","No apegarán su corazón a nada para comprometerse más eficazmente con esta virtud, que debe serles tanto más querida cuanto que es menos conocida del mundo, y puesto que se la teme y se huye de ella sólo en apariencia."],
+ ["p","El defecto que se opone esencialmente a la sencillez cristiana es la Duplicidad. Cuando no se busca a Dios en todas partes, cuando se tienen en su servicio miras y designios ocultos, cuando se busca uno a sí mismo más bien que a Dios; cuando se está muy ocupado con los seres humanos, cuando se trata de atraer su estima, se teme ser despreciado y se inquieta por la manera como se comportará para agradarles y para no desagradarles. Cuando se tienen tales sentimientos, el espíritu está embarazado con ideas extrañas a la salvación, que lo oscurecen y lo llenan de miras humanas y mundanas, que quitan la sencillez, porque la sencillez no tiene sino un objeto, un motivo, una intención, que es agradar a Dios, y santificarse."],
+ ["p","Los que buscan a Dios sinceramente, lo encuentran, dice la Escritura, para hacernos entender que los que tienen un corazón falso y doble no tendrán la felicidad de encontrarle. La Imitación anota también que muchas almas parecen querer darse a Dios y dedicarse a su servicio, no sinceramente, sino por curiosidad o envanecimiento."],
+ ["p","Un segundo defecto esencialmente opuesto a la sencillez del Evangelio es el Espíritu del Mundo: la manera de pensar y obrar de la gente de mundo. Se tiene el espíritu del mundo cuando se piensa como el mundo piensa, cuando se habla como el mundo habla, cuando se ama lo que el mundo ama, se estima lo que el mundo estima, es decir, los honores, las riquezas y los placeres. Se tiene el espíritu del mundo cuando se está prendado de sus vanidades y se aparentan sus modales y sus maneras."],
+ ["p","Para confirmarlas en la práctica de esta virtud de sencillez y para preservarlas de los defectos que le son contrarios, he aquí las reglas que observarán: No tendrán otra intención, al abrazar el estado que se proponen, y al cumplir sus deberes, que la mayor gloria de Dios y la salvación de vuestra alma. Tendrán a menudo en la boca y siempre en el corazón estas palabras del Apóstol: «Todo por la gloria de Dios». «Todo en nombre de Jesucristo». Y por consiguiente, nada por el mundo, nada para agradar a los seres humanos, nada para satisfacción de sí mismas."],
+ ["p","Esta es la lección que el Salvador nos da: «Que nuestras palabras sean sencillas», lo cual consiste en decir sí o no, porque todo lo que se añade viene de un mal principio. Es decir, que no se debe hablar sino cuando es necesario, y al hablar decir sólo lo que es indispensable, según la necesidad del encuentro, sin derramarse en un flujo de palabras que el sabio condena pues casi nunca está exento de muchas faltas."],
+ ["h","La Caridad"],
+ ["p","Como ustedes no tendrán ningún interés material, puesto que harán todo gratuitamente y sin retribución alguna, sólo la caridad las hará actuar en todo y en todas partes. Ejercerán las obras de misericordia con todo el mundo, tanto las obras espirituales como las corporales."],
+ ["p","La primera obra espiritual de misericordia es enseñar a los ignorantes. Esa será vuestra función principal. La ejercitarán no solamente con los niños, sino con todos los que no estén suficientemente instruidos. Cuando tengan razones para creer que una persona ignora los principales misterios de la fe o las otras cosas necesarias para la salvación, se los enseñarán a manera de conversación."],
+ ["p","El segundo deber de la caridad espiritual es corregir a los pecadores. Ustedes lo ejercitarán con los niños que tengan a su cargo. Y se informarán sobre los vicios que reinan en el lugar donde estén y los combatirán con la palabra y el ejemplo."],
+ ["p","El tercer deber de la caridad espiritual es dar consejos a los que los necesitan. Para esto hay que conocer bien a la persona a quien se aconseja, porque si no se conocen perfectamente sus disposiciones, vale más callar que exponerse a decir cosas que harían más mal que bien."],
+ ["p","El cuarto deber de la caridad espiritual es consolar a los afligidos. Cuando sepan que una persona tiene una pena, vayan a consolarla; exhórtenla a sufrir con paciencia y resignación, y aprovechen la ocasión para hacerle algunas advertencias saludables."],
+ ["p","La quinta obra de caridad espiritual es sufrir las injurias y perdonarlas, y soportar los defectos del prójimo. Acuérdense de este deber cuando los padres y las madres y los niños no les paguen las penas que ustedes se toman por su educación sino con ingratitudes, reproches, críticas y murmuraciones. Sufran todo eso y ofrézcanlo a Dios por su salvación. Esto les servirá más que los bellos discursos que puedan ustedes hacerles."],
+ ["p","El sexto deber de la caridad espiritual es orar por los vivos y por los muertos, particularmente por los enemigos. Sin la oración, todo lo que ustedes digan será inútil. Es de fe que no podemos nada para nosotros ni para los otros sin el socorro de la gracia, y el medio de obtenerla es la oración. Oren pues sin cesar."],
+ ["p","En cuanto a las obras corporales de misericordia, harán en los campos más o menos lo que nuestras Hermanas de la Caridad hacen en las ciudades, en cuanto sea compatible con la instrucción de los niños que es vuestro deber esencial, a menos que una necesidad urgente las obligue a interrumpir la escuela para prestar algún pronto socorro."],
+ ["p","Como ustedes mismas son pobres, sé que no podrán ayudar a los desposeídos con recursos propios; sin embargo, si comparten con ellos lo poco que tengan, la caridad se hará más agradable a Dios que la de los ricos que dan de su abundancia. El medio de que ustedes se servirán para ayudar a los pobres será presentar sus necesidades a quienes podrían socorrerlas y solicitar a los ricos con qué aliviarlas. Pedirán por ejemplo tela para vestir a los huérfanos. Podrán también tomar una pobre huérfana en casa de ustedes, para instruirla y educarla, rogando a alguna persona caritativa que les dé con qué alimentarla. Cuántas buenas obras se pueden hacer cuando se tiene caridad."],
+ ["h","Prueba de una Postulante"],
+ ["p","Antes de admitir a una postulante, se la hará poner de rodillas y se le preguntará si cree lo que Jesucristo dijo en el Evangelio: «No se inquieten diciendo ¿Qué comeremos? ¿Con qué nos vestiremos? Esas son inquietudes de paganos. El Padre celestial sabe que ustedes necesitan de todas esas cosas. Busquen primero el reino de Dios y su justicia, y lo demás se les dará por añadidura»."],
+ ["p","La postulante hará un acto de fe sobre estas palabras del Evangelio y un acto de confianza en la Divina Providencia que gobierna todo y alimenta a las aves del cielo, según estas palabras de San Pedro: «Depositen todas sus inquietudes en el seno de Dios». Se le preguntará si confía más en un contrato firmado delante de un notario que en la palabra del Evangelio, firmada con la sangre de Jesucristo."],
+ ["p","Si la postulante no tiene una firme confianza en Dios, si no quiere abandonarse en Dios y dejarle el cuidado de su cuerpo y de su alma por el resto de su vida, no será admitida."],
+ ["h","El Abandono en la Providencia. Motivos de Confianza"],
+ ["p","La Providencia todo lo prevé, todo lo regula, todo lo provee. La Providencia vigila el universo en general y a cada criatura en particular como si fuera sola y única, porque siendo infinita, su atención no se divide ni se disminuye por la multiplicidad de las cosas."],
+ ["p","La Providencia tiene cuidado de todo; se entiende hasta de los más pequeños insectos, alimenta las aves del cielo y los animales de la tierra; cuida los lirios del campo, conoce el número de los granos de arena que están al borde del mar y los átomos del aire; con mayor razón cuida de nosotros, hechos a imagen de Dios y destinados a su Reino."],
+ ["p","Dios conoce todas nuestras necesidades puesto que lo sabe todo, puede proveer a ellas puesto que es todopoderoso; lo quiere, puesto que es infinitamente bueno. Qué motivo de confianza para nosotros."],
+ ["p","La Providencia gobierna todo con una sabiduría admirable; no cae ni un cabello de nuestra cabeza sin su participación; procura el bien y permite el mal para sacar de ello un mayor bien; reparte las cruces y las aflicciones tanto como los favores y las prosperidades; nos eleva y rebaja, nos conduce a las puertas de la muerte y nos aleja de ella; pero en todo tiene sus miras, sus designios; hace todo para la gloria de Dios y para la salvación de los elegidos."],
+ ["p","Nada más justo y ventajoso que confiar en la Providencia. Esta confianza destierra las inquietudes de nuestro espíritu, calma las turbaciones y las agitaciones de nuestro corazón, apacigua las rebeldías de nuestra voluntad, modera la violencia de nuestros ardores, detiene nuestras quejas y murmuraciones, suaviza nuestras penas, nos hace sacar ventaja de todo."],
+ ["p","Cuántos motivos poderosos nos llevan pues a un abandono total en la Divina Providencia, que vela con una atención y una benevolencia muy particular sobre los que confían en ella."],
+ ["h","Acto de Abandono en la Providencia"],
+ ["p","Providencia de mi Dios, admirable y divina Providencia, infinitamente ilustrada, que todo lo prevés y que todo lo provees, Providencia infinitamente sabia, que gobiernas todo con orden, peso y medida, te adoro en todas tus disposiciones."],
+ ["p","Me abandono en Ti sin reserva; pongo mi suerte en tus manos. Te confío el cuidado de mi cuerpo, de mi alma, de mi salud y de mi reputación; de mis bienes y de mi fortuna, de mi vida y de mi muerte, y sobre todo mi salvación eterna, con la firme persuasión de que en ninguna parte estará mejor que en tus manos."],
+ ["p","No quiero en adelante gobernarme más por mí misma, quiero dejarme gobernar en todo por la Providencia. No quiero entregarme más a inquietudes inútiles ni a cuidados superfluos. Haciendo lo que Dios me ordena, confiaré a la Providencia el éxito de todas mis empresas y de todos mis trabajos; esperaré todo de su bondad y descansaré siempre en ella."],
+ ["p","No emprenderé nada que no confíe a la Providencia, y en todas mis dificultades e inquietudes acudiré siempre a ella como a un recurso infalible. Pondré en ella toda mi confianza, esperando que me preservará de los males que temo o me dará la fortaleza de soportarlos con paciencia si me los envía y así me serán provechosos. No temeré sino el único mal que es el pecado."],
+ ["p","Tendré siempre presente esta verdad, que todo lo que me sucede es una disposición y un efecto de la Providencia, convencida de que Dios cuida de mí como si fuera única en el mundo. Así, tranquila en todo y contenta con todo, quiero vivir y morir bajo el imperio y las órdenes de la divina Providencia; no quiero apartarme de ella un solo instante, no trataré ni de apresurarla ni de posponerla, esperaré pacientemente los momentos que ella fije y determine; toda mi atención será estudiarla y seguirla hasta en las cosas más pequeñas."],
+ ["p","Santa y amable Providencia, te doy gracias por todos los cuidados caritativos que has querido prodigarle a una criatura tan pequeña y débil como yo. Te ruego humilde e insistentemente que continúes prodigándomelos. Conduce todos mis pasos, regula todas mis acciones, gobiérname en todos los momentos de mi vida; dispón de mí y de todo lo que me pertenece como te plazca, para tu mayor gloria y para mi salvación. Amén."]
+];
+
+/* =================== AUDIO (speechSynthesis) =================== */
+var TTS = (typeof window.speechSynthesis !== 'undefined');
+var parrafos = [], idxActual = -1, leyendo = false, pausado = false;
+
+function renderTexto(items){
+  var cont = $('texto'); cont.innerHTML = ''; parrafos = [];
+  for (var k = 0; k < items.length; k++){
+    var it = items[k];
+    if (it[0] === 'h'){ var h = document.createElement('h3'); h.textContent = it[1]; cont.appendChild(h); }
+    else {
+      var p = document.createElement('p'); p.textContent = it[1];
+      p.setAttribute('data-i', String(parrafos.length));
+      cont.appendChild(p); parrafos.push(p);
+    }
+  }
+  for (var j = 0; j < parrafos.length; j++){
+    parrafos[j].onclick = (function(idx){ return function(){ detener(); iniciar(idx); }; })(j);
+  }
+}
+
+var voces = [];
+function cargarVoces(){
+  var sel = $('selVoz'); sel.innerHTML = '';
+  if (!TTS){
+    var oNo = document.createElement('option'); oNo.textContent = 'Voz no disponible aquí'; sel.appendChild(oNo);
+    return;
+  }
+  voces = window.speechSynthesis.getVoices().filter(function(v){ return v.lang.toLowerCase().indexOf('es') === 0; });
+  var orden = ['es-co','es-us','es-mx','es-419','es-es'];
+  voces.sort(function(a,b){
+    var ia = orden.indexOf(a.lang.toLowerCase()); if (ia < 0) ia = 9;
+    var ib = orden.indexOf(b.lang.toLowerCase()); if (ib < 0) ib = 9;
+    return ia - ib;
+  });
+  for (var i = 0; i < voces.length; i++){
+    var o = document.createElement('option'); o.value = String(i);
+    o.textContent = voces[i].name + ' (' + voces[i].lang + ')' + (voces[i].lang.toLowerCase() === 'es-co' ? ' ★ Colombia' : '');
+    sel.appendChild(o);
+  }
+  var g = lsGet('vozLibro');
+  if (g !== null && Number(g) < voces.length) sel.value = g;
+  if (!voces.length){ var o2 = document.createElement('option'); o2.textContent = 'Sin voces en español detectadas'; sel.appendChild(o2); }
+}
+
+function hablarParrafo(i){
+  if (i >= parrafos.length){ detener(); $('stAudio').textContent = '✅ Lectura terminada.'; return; }
+  idxActual = i;
+  for (var j = 0; j < parrafos.length; j++) parrafos[j].classList.remove('hablando');
+  parrafos[i].classList.add('hablando');
+  try { parrafos[i].scrollIntoView({block:'center', behavior:'smooth'}); } catch(e){ parrafos[i].scrollIntoView(); }
+  $('stAudio').textContent = 'Leyendo párrafo ' + (i+1) + ' de ' + parrafos.length + '…';
+  var u = new SpeechSynthesisUtterance(parrafos[i].textContent);
+  var v = voces[Number($('selVoz').value)];
+  if (v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'es-CO'; }
+  u.rate = parseFloat($('rate').value);
+  u.onend = function(){ if (leyendo && !pausado) hablarParrafo(i+1); };
+  window.speechSynthesis.speak(u);
+}
+function iniciar(desde){
+  if (!parrafos.length){ $('stAudio').textContent = '📚 Primero genera un PDF en «Imágenes → PDF» o selecciona un libro de la lista.'; return; }
+  if (!TTS){ $('stAudio').textContent = '⚠️ Este entorno no permite síntesis de voz. Abre este archivo en Chrome/Edge o escucha el MP3 de la carpeta.'; return; }
+  leyendo = true; pausado = false;
+  $('btnPlay').disabled = true; $('btnPause').disabled = false; $('btnStop').disabled = false;
+  hablarParrafo(typeof desde === 'number' ? desde : Math.max(idxActual, 0));
+}
+function detener(){
+  leyendo = false; pausado = false;
+  if (TTS) window.speechSynthesis.cancel();
+  for (var j = 0; j < parrafos.length; j++) parrafos[j].classList.remove('hablando');
+  $('btnPlay').disabled = false; $('btnPause').disabled = true; $('btnStop').disabled = true;
+  $('btnPause').textContent = '⏸ Pausa';
+}
+
+/* =================== TABS =================== */
+function activarTab(t){
+  var tabs = document.querySelectorAll('.tab'), panels = document.querySelectorAll('.panel');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  for (var j = 0; j < panels.length; j++) panels[j].classList.remove('active');
+  t.classList.add('active');
+  $('p-' + t.getAttribute('data-p')).classList.add('active');
+}
+
+/* =================== IMÁGENES → PDF =================== */
+var imgs = [];
+
+function agregar(files){
+  var nuevos = [];
+  for (var i = 0; i < files.length; i++){ if (files[i].type && files[i].type.indexOf('image/') === 0) nuevos.push(files[i]); }
+  nuevos.sort(function(a,b){ return a.name.localeCompare(b.name, undefined, {numeric:true}); });
+  if (!nuevos.length) return;
+  $('stPdf').textContent = '⏳ Cargando ' + nuevos.length + ' imágenes…';
+  var lote = new Array(nuevos.length), pend = nuevos.length;
+  function fin(){
+    for (var k = 0; k < lote.length; k++){ if (lote[k]) imgs.push(lote[k]); }
+    renderGrid();
+    $('stPdf').textContent = '✅ Imágenes listas. Ordena o gira si hace falta, escribe el nombre y pulsa «Generar PDF».';
+  }
+  for (var n = 0; n < nuevos.length; n++){
+    (function(f, pos){
+      var rd = new FileReader();
+      rd.onload = function(){ lote[pos] = {name: f.name, url: rd.result, rot: 0}; if (--pend === 0) fin(); };
+      rd.onerror = function(){ lote[pos] = null; if (--pend === 0) fin(); };
+      rd.readAsDataURL(f);
+    })(nuevos[n], n);
+  }
+}
+
+function renderGrid(){
+  var g = $('grid'); g.innerHTML = '';
+  for (var i = 0; i < imgs.length; i++){
+    var im = imgs[i];
+    var d = document.createElement('div'); d.className = 'thumb';
+    d.innerHTML = '<img src="' + im.url + '" style="transform:rotate(' + im.rot + 'deg)">' +
+      '<span class="n">' + (i+1) + '. ' + im.name + '</span>' +
+      '<div class="btns">' +
+      '<button title="Mover antes" data-a="izq" data-i="' + i + '">←</button>' +
+      '<button title="Girar 90°" data-a="rot" data-i="' + i + '">↻</button>' +
+      '<button title="Quitar" data-a="del" data-i="' + i + '">✕</button>' +
+      '<button title="Mover después" data-a="der" data-i="' + i + '">→</button></div>';
+    g.appendChild(d);
+  }
+  var bs = g.querySelectorAll('button');
+  for (var k = 0; k < bs.length; k++){
+    bs[k].onclick = function(){
+      var i2 = Number(this.getAttribute('data-i')), a = this.getAttribute('data-a'), tmp;
+      if (a === 'rot') imgs[i2].rot = (imgs[i2].rot + 90) % 360;
+      if (a === 'del') imgs.splice(i2, 1);
+      if (a === 'izq' && i2 > 0){ tmp = imgs[i2-1]; imgs[i2-1] = imgs[i2]; imgs[i2] = tmp; }
+      if (a === 'der' && i2 < imgs.length-1){ tmp = imgs[i2+1]; imgs[i2+1] = imgs[i2]; imgs[i2] = tmp; }
+      renderGrid();
+    };
+  }
+  $('cnt').textContent = imgs.length + ' imágenes';
+  var off = !imgs.length;
+  $('btnPDF').disabled = off; $('btnGirarTodo').disabled = off; $('btnLimpiar').disabled = off;
+}
+
+function cargarImg(url){
+  return new Promise(function(res, rej){
+    var i = new Image();
+    i.onload = function(){ res(i); };
+    i.onerror = function(){ rej(new Error('no se pudo procesar una imagen')); };
+    i.src = url;
+  });
+}
+
+function imagenAJpeg(im){
+  return cargarImg(im.url).then(function(el){
+    var rot = im.rot % 360, giro = (rot === 90 || rot === 270);
+    var w = giro ? el.naturalHeight : el.naturalWidth;
+    var h = giro ? el.naturalWidth : el.naturalHeight;
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, w, h);
+    x.translate(w/2, h/2); x.rotate(rot * Math.PI/180);
+    x.drawImage(el, -el.naturalWidth/2, -el.naturalHeight/2);
+    var dataUrl = c.toDataURL('image/jpeg', 0.88);
+    var bin = atob(dataUrl.split(',')[1]);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return {bytes: bytes, w: w, h: h};
+  });
+}
+
+async function generarPDF(){
+  $('btnPDF').disabled = true;
+  $('linkPDF').style.display = 'none';
+  try {
+    var enc = new TextEncoder();
+    var partes = [], offsets = [], pos = 0;
+    function push(d){
+      var b = (typeof d === 'string') ? enc.encode(d) : d;
+      partes.push(b); pos += b.length;
+    }
+    function objStart(){ offsets.push(pos); }
+    push('%PDF-1.4\n%µµµµ\n');
+    var n = imgs.length;
+    objStart(); push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    var kids = [];
+    for (var q = 0; q < n; q++) kids.push((3 + q*3) + ' 0 R');
+    objStart(); push('2 0 obj\n<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>\nendobj\n');
+    for (var i = 0; i < n; i++){
+      $('stPdf').textContent = '⚙ Procesando página ' + (i+1) + ' de ' + n + '…';
+      var r = await imagenAJpeg(imgs[i]);
+      var esc = 842 / Math.max(r.w, r.h);
+      var pw = (r.w*esc).toFixed(2), ph = (r.h*esc).toFixed(2);
+      var po = 3 + i*3, io = 4 + i*3, co = 5 + i*3;
+      objStart(); push(po + ' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pw + ' ' + ph + '] /Resources << /XObject << /Im' + i + ' ' + io + ' 0 R >> >> /Contents ' + co + ' 0 R >>\nendobj\n');
+      objStart(); push(io + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + r.w + ' /Height ' + r.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + r.bytes.length + ' >>\nstream\n');
+      push(r.bytes); push('\nendstream\nendobj\n');
+      var cs = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im' + i + ' Do Q';
+      objStart(); push(co + ' 0 obj\n<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream\nendobj\n');
+    }
+    var xrefPos = pos;
+    var xref = 'xref\n0 ' + (offsets.length+1) + '\n0000000000 65535 f \n';
+    for (var m = 0; m < offsets.length; m++){
+      var s10 = String(offsets[m]); while (s10.length < 10) s10 = '0' + s10;
+      xref += s10 + ' 00000 n \n';
+    }
+    xref += 'trailer\n<< /Size ' + (offsets.length+1) + ' /Root 1 0 R >>\nstartxref\n' + xrefPos + '\n%%EOF';
+    push(xref);
+
+    var blob = new Blob(partes, {type:'application/pdf'});
+    var nombre = ($('pdfNombre').value || 'libro').replace(/[^\w áéíóúñÁÉÍÓÚÑüÜ.-]/g, '').trim();
+    if (!nombre) nombre = 'libro';
+    nombre = nombre.replace(/\.pdf$/i, '');
+    var dataUrl = await new Promise(function(res, rej){
+      var rd = new FileReader();
+      rd.onload = function(){ res(rd.result); };
+      rd.onerror = function(){ rej(new Error('no se pudo codificar el PDF')); };
+      rd.readAsDataURL(blob);
+    });
+    var mb = (blob.size/1048576).toFixed(1);
+    var link = $('linkPDF');
+    link.href = dataUrl; link.download = nombre + '.pdf';
+    link.textContent = '⬇ Descargar «' + nombre + '.pdf» (' + mb + ' MB, ' + n + ' páginas)';
+    link.style.display = 'inline-block';
+    try { link.click(); } catch(eClick){}
+
+    var guardado = false;
+    if (window.cowork && typeof window.cowork.callMcpTool === 'function'){
+      try { guardado = await guardarEnLibros(dataUrl.split(',')[1], nombre); } catch(eG){}
+    }
+    $('stPdf').textContent = guardado
+      ? '✅ «' + nombre + '.pdf» (' + n + ' páginas) guardado en tu carpeta LIBROS. También tienes el enlace de descarga.'
+      : '✅ PDF de ' + n + ' páginas listo (' + mb + ' MB). Si no se descargó solo, usa el enlace «⬇ Descargar».';
+
+    /* Paso 2 del flujo: buscar la transcripción del libro y cargarla en el Audiolibro */
+    var enLector = await buscarYcargarTxt(nombre);
+    if (enLector){
+      $('stPdf').textContent += ' 🎧 Transcripción encontrada: el libro ya está en la pestaña Audiolibro.';
+      activarTab(document.querySelector('.tab[data-p="audio"]'));
+    } else if (hayBridge() && guardado){
+      try {
+        await ocrLibro(nombre);
+        var enLector2 = await buscarYcargarTxt(nombre);
+        if (enLector2){
+          $('stPdf').textContent = '✅ «' + nombre + '» guardado y transcrito automáticamente (OCR). 🎧 Listo en la pestaña Audiolibro.';
+          activarTab(document.querySelector('.tab[data-p="audio"]'));
+        } else {
+          $('stPdf').textContent += ' ⚠️ El OCR terminó pero no pude cargar la transcripción; revisa la lista 📖.';
+        }
+      } catch(eO){
+        $('stPdf').textContent += ' ⚠️ Transcripción automática no disponible (' + (eO && eO.message ? eO.message : eO) + '). Pide la transcripción a Claude.';
+      }
+    } else if (hayBridge()){
+      $('stPdf').textContent += ' 🔎 Falta la transcripción de este libro: pídesela a Claude.';
+    } else {
+      try {
+        var cargoEnLector = await ocrNavegador(nombre);
+        if (cargoEnLector){
+          $('stPdf').textContent = '✅ «' + nombre + '» transcrito aquí mismo (OCR). 🎧 Listo en la pestaña Audiolibro. Descarga también el .txt y guárdalo en la carpeta del libro.';
+          activarTab(document.querySelector('.tab[data-p="audio"]'));
+        } else {
+          $('stPdf').textContent = '✅ PDF listo y transcripción creada (OCR). Tu libro actual en el Audiolibro no se tocó: descarga el .txt de aquí abajo y guárdalo en la carpeta del libro nuevo.';
+        }
+      } catch(eN){
+        $('stPdf').textContent += ' ⚠️ OCR no disponible: ' + (eN && eN.message ? eN.message : eN) + '.';
+      }
+    }
+  } catch(e){
+    $('stPdf').textContent = '❌ Error: ' + (e && e.message ? e.message : e);
+  }
+  $('btnPDF').disabled = false;
+}
+
+/* Guardado directo en la carpeta LIBROS (solo dentro de Cowork) */
+function bashArt(cmd){
+  return window.cowork.callMcpTool('mcp__workspace__bash', {command: cmd, timeout_ms: 40000}).then(function(r){
+    var txt = (r && r.content && r.content[0] && r.content[0].text) ? r.content[0].text.trim() : '';
+    if (r && r.isError) throw new Error(txt || 'fallo del comando');
+    return txt;
+  });
+}
+async function guardarEnLibros(b64, nombre){
+  var tmp = '/tmp/art_pdf_' + Date.now() + '.b64';
+  var CH = 400000;
+  for (var i = 0; i < b64.length; i += CH){
+    $('stPdf').textContent = '💾 Guardando en LIBROS… ' + Math.round(Math.min(1, (i+CH)/b64.length) * 90) + '%';
+    await bashArt("printf '%s' '" + b64.slice(i, i+CH) + "' >> " + tmp);
+  }
+  /* Si existe una carpeta de libro con el mismo nombre, guardar el PDF dentro de ella */
+  var out = await bashArt('d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); if [ -z "$d" ]; then echo NOFOLDER; else sub=$(find "$d" -maxdepth 1 -type d -iname "' + nombre + '" 2>/dev/null | head -1); if [ -n "$sub" ]; then dest="$sub"; else dest="$d"; fi; base64 -d ' + tmp + ' > "$dest/' + nombre + '.pdf" && rm -f ' + tmp + ' && echo GUARDADO; fi');
+  if (out.indexOf('GUARDADO') >= 0) return true;
+  throw new Error('carpeta no disponible');
+}
+
+/* =================== BIBLIOTECA (transcripciones .txt en LIBROS) =================== */
+var BRIDGE_OK = false, BRIDGE_ERR = '';
+function hayBridge(){ return BRIDGE_OK; }
+async function probarBridge(){
+  if (!(window.cowork && typeof window.cowork.callMcpTool === 'function')){
+    BRIDGE_OK = false; BRIDGE_ERR = 'sin puente cowork'; aplicarModo(); return;
+  }
+  try {
+    var r = await window.cowork.callMcpTool('mcp__workspace__bash', {command: 'echo VIVO'});
+    var t = (r && r.content && r.content[0] && r.content[0].text) ? r.content[0].text : '';
+    BRIDGE_OK = !(r && r.isError) && t.indexOf('VIVO') >= 0;
+    BRIDGE_ERR = BRIDGE_OK ? '' : (t || 'respuesta vacía');
+  } catch(e){ BRIDGE_OK = false; BRIDGE_ERR = (e && e.message) ? e.message : String(e); }
+  aplicarModo();
+}
+function aplicarModo(){
+  if (BRIDGE_OK){
+    $('stModo').textContent = '🟢 Automatización Cowork activa: OCR automático, biblioteca y MP3 disponibles.';
+    poblarSelector().then(restaurarUltimo);
+  } else {
+    $('stModo').textContent = '🌐 Modo navegador: PDF, transcripción OCR y MP3 se generan y descargan aquí mismo (necesita internet para cargar los motores la primera vez).';
+  }
+}
+function restaurarUltimo(){
+  var g = lsGet('libroActual');
+  if (!g || g === 'NONE') return;
+  var sel = $('selLibro');
+  for (var i = 0; i < sel.options.length; i++){
+    if (sel.options[i].value === g){ sel.value = g; cargarLibroSel(g); break; }
+  }
+}
+/* Partir texto en párrafos de ~350+ caracteres terminados en puntuación (sin lookbehind) */
+function aParrafos(raw){
+  raw = raw.replace(/-\n/g, '').replace(/\s+/g, ' ').trim();
+  var palabras = raw.split(' ');
+  var ps = [], cur = '';
+  for (var i = 0; i < palabras.length; i++){
+    cur += (cur ? ' ' : '') + palabras[i];
+    if (cur.length > 350 && /[.!?…:;]$/.test(palabras[i])){ ps.push(cur); cur = ''; }
+  }
+  if (cur) ps.push(cur);
+  return ps.length ? ps : [raw];
+}
+function comoItems(ps){
+  var items = [];
+  for (var i = 0; i < ps.length; i++) items.push(['p', ps[i]]);
+  return items;
+}
+
+var NOMBRE_EMBED = 'EL PROYECTO de las Hermanas de la Providencia';
+var biblioteca = {}; /* nombre del libro -> ruta relativa del .txt ('' si falta) */
+var libroActualNombre = null;
+
+function mostrarBienvenida(){
+  $('texto').innerHTML = '<h3>📚 Biblioteca de audiolibros</h3>' +
+    '<p style="cursor:default">1. Ve a la pestaña <b>«Imágenes → PDF»</b>, carga las fotos de un libro, escribe su nombre y genera el PDF.</p>' +
+    '<p style="cursor:default">2. Si el libro ya tiene transcripción (.txt en su carpeta de LIBROS), se cargará aquí automáticamente para escucharlo. Si no la tiene, pídesela a Claude una sola vez.</p>' +
+    '<p style="cursor:default">3. Con «📖 Libro» puedes volver a cualquier libro de tu biblioteca. Con «🎵 MP3» verificas si el libro ya tiene su audio exportado.</p>';
+  parrafos = [];
+  libroActualNombre = null;
+}
+
+function listarBiblioteca(){
+  /* Cada subcarpeta de LIBROS es un libro; su transcripción es cualquier .txt dentro. También cuenta un .txt suelto en la raíz. */
+  return bashArt('d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); if [ -n "$d" ]; then cd "$d"; for f in */; do n="${f%/}"; t=$(ls "$n"/*.txt 2>/dev/null | head -1); echo "$n|$t"; done; for x in *.txt; do [ -e "$x" ] && echo "${x%.txt}|$x"; done; fi');
+}
+function leerTxt(rel){
+  return bashArt('d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); cat "$d/' + rel.replace(/"/g, '') + '"');
+}
+function cargarTextoEnLector(nombre, texto){
+  detener(); idxActual = -1;
+  renderTexto(comoItems(aParrafos(texto)));
+  $('stAudio').textContent = '📖 «' + nombre + '» cargado: ' + parrafos.length + ' párrafos. Pulsa ▶ o toca un párrafo.';
+}
+function normalizarNombre(s){
+  return s.toLowerCase().replace(/\.txt$/i, '').replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+async function poblarSelector(){
+  var sel = $('selLibro');
+  sel.innerHTML = '';
+  var oN = document.createElement('option');
+  oN.value = 'NONE'; oN.textContent = '— Selecciona un libro —';
+  sel.appendChild(oN);
+  var oE = document.createElement('option');
+  oE.value = 'EMBED'; oE.textContent = NOMBRE_EMBED;
+  sel.appendChild(oE);
+  if (!hayBridge()) return;
+  try {
+    var out = await listarBiblioteca();
+    biblioteca = {};
+    var lineas = out ? out.split('\n') : [];
+    for (var i = 0; i < lineas.length; i++){
+      var ln = lineas[i].trim();
+      if (!ln || ln.indexOf('|') < 0) continue;
+      var pp = ln.split('|');
+      var nom = pp[0].trim(), txt = (pp[1] || '').trim();
+      if (!nom || nom === '*') continue;
+      if (normalizarNombre(nom) === normalizarNombre(NOMBRE_EMBED)) continue; /* ya está integrado */
+      if (!(nom in biblioteca) || (txt && !biblioteca[nom])) biblioteca[nom] = txt;
+    }
+    var noms = Object.keys(biblioteca).sort();
+    for (var j = 0; j < noms.length; j++){
+      var tiene = !!biblioteca[noms[j]];
+      var o = document.createElement('option');
+      o.value = tiene ? ('TXT|' + biblioteca[noms[j]]) : ('NOTXT|' + noms[j]);
+      o.textContent = '📖 ' + noms[j] + (tiene ? '' : ' — falta transcripción');
+      sel.appendChild(o);
+    }
+  } catch(e){}
+}
+async function cargarLibroSel(val){
+  lsSet('libroActual', val);
+  if (val === 'NONE'){
+    detener(); idxActual = -1; mostrarBienvenida();
+    $('stAudio').textContent = 'Ningún libro cargado.';
+    return;
+  }
+  if (val === 'EMBED'){
+    detener(); idxActual = -1; renderTexto(LIBRO);
+    libroActualNombre = NOMBRE_EMBED;
+    $('stAudio').textContent = '📖 EL PROYECTO cargado. Pulsa ▶ o toca un párrafo.';
+    return;
+  }
+  if (val.indexOf('NOTXT|') === 0){
+    var nom = val.slice(6);
+    libroActualNombre = nom;
+    $('stAudio').textContent = '⚠️ «' + nom + '» aún no tiene transcripción. Pídesela a Claude; cuando el archivo .txt esté en su carpeta de LIBROS, este libro se podrá escuchar aquí.';
+    return;
+  }
+  var rel = (val.indexOf('TXT|') === 0) ? val.slice(4) : val;
+  $('stAudio').textContent = '⏳ Cargando transcripción…';
+  try {
+    var t = await leerTxt(rel);
+    libroActualNombre = (rel.indexOf('/') > 0) ? rel.split('/')[0] : rel.replace(/\.txt$/i, '');
+    cargarTextoEnLector(rel.split('/').pop().replace(/\.txt$/i, ''), t);
+  } catch(e){
+    $('stAudio').textContent = '⚠️ No pude leer esa transcripción: ' + (e && e.message ? e.message : e);
+  }
+}
+async function buscarYcargarTxt(nombre){
+  if (!hayBridge()) return false;
+  try {
+    await poblarSelector(); /* refresca la biblioteca con el libro recién generado */
+    var sel = $('selLibro');
+    var objetivo = normalizarNombre(nombre);
+    if (objetivo === normalizarNombre(NOMBRE_EMBED)){
+      sel.value = 'EMBED';
+      await cargarLibroSel('EMBED');
+      return true;
+    }
+    var noms = Object.keys(biblioteca);
+    for (var i = 0; i < noms.length; i++){
+      var base = normalizarNombre(noms[i]);
+      if (base === objetivo || base.indexOf(objetivo) >= 0 || objetivo.indexOf(base) >= 0){
+        var val = biblioteca[noms[i]] ? ('TXT|' + biblioteca[noms[i]]) : ('NOTXT|' + noms[i]);
+        sel.value = val;
+        lsSet('libroActual', val);
+        if (biblioteca[noms[i]]){ await cargarLibroSel(val); return true; }
+        return false;
+      }
+    }
+  } catch(e){}
+  return false;
+}
+
+/* =================== OCR y MP3 automáticos (solo en Cowork) =================== */
+var BOOT = '[ -x /tmp/ocr/usr/bin/tesseract ] || (cd /tmp && mkdir -p ocr && apt-get download tesseract-ocr tesseract-ocr-spa libtesseract4 liblept5 libgif7 libopenjp2-7 libwebpmux3 libwebp7 >/dev/null 2>&1; for d in /tmp/tesseract*.deb /tmp/libtesseract*.deb /tmp/liblept*.deb /tmp/libgif*.deb /tmp/libopenjp2*.deb /tmp/libwebp*.deb; do dpkg -x "$d" /tmp/ocr/ 2>/dev/null; done); [ -x /tmp/es/usr/bin/espeak-ng ] || (cd /tmp && mkdir -p es && apt-get download espeak-ng libespeak-ng1 espeak-ng-data libpcaudio0 libsonic0 >/dev/null 2>&1; for d in /tmp/espeak*.deb /tmp/libespeak*.deb /tmp/libpcaudio*.deb /tmp/libsonic*.deb; do dpkg -x "$d" /tmp/es/ 2>/dev/null; done)';
+var ENVOCR = 'export TESSDATA_PREFIX=/tmp/ocr/usr/share/tesseract-ocr/4.00/tessdata; export LD_LIBRARY_PATH=/tmp/ocr/usr/lib/x86_64-linux-gnu; ';
+
+async function ocrLibro(nombre){
+  $('stPdf').textContent = '🔍 Preparando transcripción automática (la primera vez tarda un poco más)…';
+  var prep = await bashArt(BOOT + '; d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); sub=$(find "$d" -maxdepth 1 -type d -iname "' + nombre + '" 2>/dev/null | head -1); if [ -n "$sub" ]; then dest="$sub"; else dest="$d"; fi; rm -rf /tmp/olib; mkdir -p /tmp/olib; pdftoppm -r 150 -gray "$dest/' + nombre + '.pdf" /tmp/olib/p 2>/dev/null; echo "$dest"; ls /tmp/olib/ 2>/dev/null | wc -l');
+  var partes = prep.split('\n');
+  var dest = (partes[0] || '').trim();
+  var np = parseInt((partes[1] || '0').trim(), 10) || 0;
+  if (!dest || !np) throw new Error('no pude rasterizar el PDF guardado');
+  var LOTE = 8;
+  for (var i = 1; i <= np; i += LOTE){
+    var fin = Math.min(np, i + LOTE - 1);
+    $('stPdf').textContent = '🔍 Transcribiendo páginas ' + i + ' a ' + fin + ' de ' + np + '…';
+    await bashArt(ENVOCR + 'for f in $(ls /tmp/olib/p*.p*m | sed -n "' + i + ',' + fin + 'p"); do /tmp/ocr/usr/bin/tesseract "$f" - -l spa --psm 1 2>/dev/null >> /tmp/olib/texto.txt; printf "\\n" >> /tmp/olib/texto.txt; done; echo OK');
+  }
+  var out = await bashArt('mv /tmp/olib/texto.txt "' + dest.replace(/"/g, '') + '/' + nombre + '.txt" && echo GUARDADO');
+  if (out.indexOf('GUARDADO') < 0) throw new Error('no pude guardar la transcripción');
+  return true;
+}
+
+async function generarMp3(){
+  if (!hayBridge()){ await mp3Navegador(); return; }
+  if (!libroActualNombre){ $('stAudio').textContent = '🎤 Primero selecciona o genera un libro.'; return; }
+  var nom = libroActualNombre.replace(/"/g, '');
+  $('stAudio').textContent = '🎤 Generando MP3 de «' + nom + '»… puede tardar un minuto.';
+  try {
+    var out = await bashArt(BOOT + '; d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); sub=$(find "$d" -maxdepth 1 -type d -iname "' + nom + '" 2>/dev/null | head -1); if [ -z "$sub" ]; then sub="$d"; fi; mp3=$(ls "$sub"/*.mp3 2>/dev/null | head -1); txt=$(ls "$sub"/*.txt 2>/dev/null | head -1); if [ -n "$mp3" ]; then echo "YA|$(basename "$mp3")"; elif [ -z "$txt" ]; then echo NOTXT; else export LD_LIBRARY_PATH=/tmp/es/usr/lib/x86_64-linux-gnu; /tmp/es/usr/bin/espeak-ng -v es-419 -s 150 --path=/tmp/es/usr/lib/x86_64-linux-gnu/espeak-ng-data -f "$txt" -w /tmp/olibro.wav 2>/dev/null && ffmpeg -y -i /tmp/olibro.wav -codec:a libmp3lame -b:a 64k "$sub/' + nom + ' - Audiolibro.mp3" >/dev/null 2>&1 && rm -f /tmp/olibro.wav && echo HECHO; fi');
+    if (out.indexOf('YA|') >= 0){ $('stAudio').textContent = '🎵 Este libro ya tiene su MP3: «' + out.split('|')[1] + '» está en su carpeta de LIBROS.'; }
+    else if (out.indexOf('HECHO') >= 0) $('stAudio').textContent = '✅ MP3 creado: «' + nom + ' - Audiolibro.mp3» quedó en la carpeta del libro.';
+    else if (out.indexOf('NOTXT') >= 0) $('stAudio').textContent = '⚠️ Este libro aún no tiene transcripción: genera primero su PDF (el OCR la crea sola).';
+    else $('stAudio').textContent = '⚠️ No se pudo crear el MP3.';
+  } catch(e){ $('stAudio').textContent = '⚠️ Error generando MP3: ' + (e && e.message ? e.message : e); }
+}
+
+/* =================== MP3 y OCR AUTÓNOMOS EN EL NAVEGADOR (CDN) =================== */
+var MESPEAK = null, LAMEJS = null, TESS = null;
+function cargarScript(url){
+  return new Promise(function(res, rej){
+    var sc = document.createElement('script');
+    sc.src = url;
+    sc.onload = res;
+    sc.onerror = function(){ rej(new Error('no pude descargar ' + url)); };
+    document.head.appendChild(sc);
+  });
+}
+function evalCJS(codigo, deps){
+  var module = {exports:{}};
+  (new Function('module', 'exports', 'require', codigo))(module, module.exports, function(n){ return deps[n]; });
+  return module.exports;
+}
+async function fetchTexto(url){
+  var r = await fetch(url);
+  if (!r.ok) throw new Error('descarga falló (' + r.status + ')');
+  return r.text();
+}
+async function prepararTTS(){
+  if (MESPEAK && LAMEJS) return;
+  $('stAudio').textContent = '⬇ Descargando motor de voz (solo la primera vez, ~2 MB)…';
+  var base = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.2';
+  if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+  LAMEJS = window.lamejs;
+  var esp = evalCJS(await fetchTexto(base + '/src/ESpeak.js'), {});
+  MESPEAK = evalCJS(await fetchTexto(base + '/src/index.js'), {'./ESpeak.js': esp});
+  MESPEAK.loadConfig(JSON.parse(await fetchTexto(base + '/src/mespeak_config.json')));
+  MESPEAK.loadVoice(JSON.parse(await fetchTexto(base + '/voices/es-la.json')));
+}
+function wavAPcm(u8){
+  var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  var sr = dv.getUint32(24, true);
+  var off = 12;
+  while (off < u8.length - 8){
+    var id = String.fromCharCode(u8[off], u8[off+1], u8[off+2], u8[off+3]);
+    var sz = dv.getUint32(off + 4, true);
+    if (id === 'data') return {pcm: new Int16Array(u8.buffer, u8.byteOffset + off + 8, sz >> 1), sr: sr};
+    off += 8 + sz + (sz % 2);
+  }
+  throw new Error('WAV sin bloque de datos');
+}
+function sondearAudio(url){
+  return new Promise(function(res){
+    try {
+      var a = new Audio();
+      var fin = false;
+      function r(v){ if (!fin){ fin = true; res(v); } }
+      a.preload = 'metadata';
+      a.onloadedmetadata = function(){ r(true); };
+      a.onerror = function(){ r(false); };
+      setTimeout(function(){ r(false); }, 4000);
+      a.src = url;
+    } catch(e){ res(false); }
+  });
+}
+async function mp3VozWindows(){
+  /* Busca el MP3 creado con la voz de Windows junto al libro (solo al abrir el archivo desde la carpeta LIBROS) */
+  var esquemaOk = (location.protocol === 'file:' || location.protocol === 'http:' || location.protocol === 'https:');
+  if (!esquemaOk || !libroActualNombre) return false;
+  var carpeta = encodeURIComponent(libroActualNombre);
+  var candidatos = [
+    carpeta + '/' + encodeURIComponent(libroActualNombre) + '.mp3',
+    encodeURIComponent(libroActualNombre) + '.mp3'
+  ];
+  for (var i = 0; i < candidatos.length; i++){
+    if (await sondearAudio(candidatos[i])){
+      var a = document.createElement('a');
+      a.href = candidatos[i];
+      a.download = libroActualNombre + '.mp3';
+      document.body.appendChild(a); a.click(); a.remove();
+      $('stAudio').textContent = '✅ MP3 del libro descargado (con la voz de Windows ya creada para este libro).';
+      return true;
+    }
+  }
+  return false;
+}
+async function mp3Navegador(){
+  if (await mp3VozWindows()) return;
+  if (!parrafos.length){ $('stAudio').textContent = '📚 Primero carga o genera un libro.'; return; }
+  try {
+    await prepararTTS();
+    var nombre = ((libroActualNombre || 'audiolibro').replace(/[^\w áéíóúñÁÉÍÓÚÑüÜ.-]/g, '').trim() || 'audiolibro');
+    var enc = null, parts = [], sr = 22050;
+    for (var i = 0; i < parrafos.length; i++){
+      $('stAudio').textContent = '🎤 Creando MP3: párrafo ' + (i+1) + ' de ' + parrafos.length + '…';
+      await new Promise(function(r){ setTimeout(r, 0); });
+      var raw = MESPEAK.speak(parrafos[i].textContent, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
+      if (!raw) raw = MESPEAK.speak(parrafos[i].textContent, {rawdata: true, voice: 'es-la', speed: 150});
+      var d = wavAPcm(new Uint8Array(raw));
+      if (!enc){ sr = d.sr; enc = new LAMEJS.Mp3Encoder(1, sr, 64); }
+      for (var j = 0; j < d.pcm.length; j += 1152){
+        var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
+        if (b.length) parts.push(new Uint8Array(b));
+      }
+      var sil = new Int16Array(Math.floor(sr * 0.35));
+      for (var k = 0; k < sil.length; k += 1152){
+        var b2 = enc.encodeBuffer(sil.subarray(k, Math.min(k + 1152, sil.length)));
+        if (b2.length) parts.push(new Uint8Array(b2));
+      }
+    }
+    var fin = enc.flush();
+    if (fin.length) parts.push(new Uint8Array(fin));
+    var blob = new Blob(parts, {type: 'audio/mpeg'});
+    var a = document.createElement('a');
+    var urlB = URL.createObjectURL(blob);
+    a.href = urlB; a.download = nombre + '.mp3';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(urlB); }, 30000);
+    var pista = '';
+    if (location.protocol === 'file:' && libroActualNombre){
+      pista = ' 💡 Voz de Windows: no encontré «' + libroActualNombre + '/' + libroActualNombre + '.mp3». Créalo arrastrando el .txt del libro sobre «Crear MP3 con voz de Windows.bat» y verifica que quede con ese nombre exacto; entonces este botón lo entregará.';
+    }
+    $('stAudio').textContent = '✅ «' + nombre + '.mp3» descargado (' + (blob.size/1048576).toFixed(1) + ' MB), con voz sintética.' + pista;
+  } catch(e){
+    $('stAudio').textContent = '⚠️ No pude crear el MP3: ' + (e && e.message ? e.message : e) + '. Verifica tu conexión a internet.';
+  }
+}
+function rotadaDataUrl(im){
+  return cargarImg(im.url).then(function(el){
+    var rot = im.rot % 360, giro = (rot === 90 || rot === 270);
+    var w = giro ? el.naturalHeight : el.naturalWidth;
+    var h = giro ? el.naturalWidth : el.naturalHeight;
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, w, h);
+    x.translate(w/2, h/2); x.rotate(rot * Math.PI/180);
+    x.drawImage(el, -el.naturalWidth/2, -el.naturalHeight/2);
+    return c.toDataURL('image/jpeg', 0.9);
+  });
+}
+async function ocrNavegador(nombre){
+  if (!window.Tesseract){
+    $('stPdf').textContent = '⬇ Descargando motor OCR (solo la primera vez)…';
+    await cargarScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+  }
+  if (!TESS) TESS = await window.Tesseract.createWorker('spa');
+  var texto = '';
+  for (var i = 0; i < imgs.length; i++){
+    $('stPdf').textContent = '🔍 Transcribiendo página ' + (i+1) + ' de ' + imgs.length + '… (OCR en tu navegador)';
+    var r = await TESS.recognize(await rotadaDataUrl(imgs[i]));
+    var pag = limpiarTextoOcr(r && r.data && r.data.text ? r.data.text : '');
+    if (pag) texto += pag + '\n\n';
+  }
+  if (texto.replace(/\s+/g, ' ').trim().length < 100) throw new Error('el OCR no encontró texto legible');
+  var lectorLibre = (!parrafos.length || !libroActualNombre);
+  if (lectorLibre) cargarTextoEnLector(nombre, texto);
+  var lt = $('linkTXT');
+  lt.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(texto);
+  lt.download = nombre + '.txt';
+  lt.textContent = '⬇ Descargar transcripción «' + nombre + '.txt» (guárdala en la carpeta del libro)';
+  lt.style.display = 'inline-block';
+  return lectorLibre;
+}
+
+/* ============ Conversor WAV (voz de Windows) → MP3 ============ */
+function wavInfo(u8){
+  var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  if (String.fromCharCode(u8[0],u8[1],u8[2],u8[3]) !== 'RIFF') throw new Error('no es un archivo WAV');
+  var off = 12, fmt = null, data = null;
+  while (off < u8.length - 8){
+    var id = String.fromCharCode(u8[off], u8[off+1], u8[off+2], u8[off+3]);
+    var sz = dv.getUint32(off + 4, true);
+    if (id === 'fmt ') fmt = {ch: dv.getUint16(off+10, true), sr: dv.getUint32(off+12, true), bits: dv.getUint16(off+22, true)};
+    if (id === 'data'){ data = {ini: off + 8, sz: sz}; break; }
+    off += 8 + sz + (sz % 2);
+  }
+  if (!fmt || !data) throw new Error('WAV incompleto');
+  if (fmt.bits !== 16) throw new Error('solo WAV de 16 bits (este es de ' + fmt.bits + ')');
+  return {fmt: fmt, pcm: new Int16Array(u8.buffer, u8.byteOffset + data.ini, data.sz >> 1)};
+}
+async function convertirWav(archivo){
+  try {
+    if (!window.lamejs){
+      $('stAudio').textContent = '⬇ Descargando codificador…';
+      await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+    }
+    $('stAudio').textContent = '🔁 Leyendo «' + archivo.name + '»…';
+    var buf = await new Promise(function(res, rej){
+      var rd = new FileReader();
+      rd.onload = function(){ res(rd.result); };
+      rd.onerror = function(){ rej(new Error('no pude leer el archivo')); };
+      rd.readAsArrayBuffer(archivo);
+    });
+    var w = wavInfo(new Uint8Array(buf));
+    var pcm = w.pcm;
+    if (w.fmt.ch === 2){
+      var mono = new Int16Array(pcm.length >> 1);
+      for (var m = 0; m < mono.length; m++) mono[m] = (pcm[2*m] + pcm[2*m+1]) >> 1;
+      pcm = mono;
+    } else if (w.fmt.ch !== 1) throw new Error('WAV de ' + w.fmt.ch + ' canales no soportado');
+    var enc = new window.lamejs.Mp3Encoder(1, w.fmt.sr, 64);
+    var parts = [], PASO = 1152 * 40;
+    for (var i = 0; i < pcm.length; i += PASO){
+      if (i % (PASO * 10) === 0){
+        $('stAudio').textContent = '🔁 Convirtiendo a MP3… ' + Math.round(i / pcm.length * 100) + '%';
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+      for (var j = i; j < Math.min(i + PASO, pcm.length); j += 1152){
+        var b = enc.encodeBuffer(pcm.subarray(j, Math.min(j + 1152, pcm.length)));
+        if (b.length) parts.push(new Uint8Array(b));
+      }
+    }
+    var fin = enc.flush();
+    if (fin.length) parts.push(new Uint8Array(fin));
+    var blob = new Blob(parts, {type: 'audio/mpeg'});
+    var nombre = archivo.name.replace(/\.wav$/i, '') + '.mp3';
+    var a = document.createElement('a');
+    var u = URL.createObjectURL(blob);
+    a.href = u; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(u); }, 30000);
+    $('stAudio').textContent = '✅ «' + nombre + '» descargado (' + (blob.size/1048576).toFixed(1) + ' MB), con la misma voz del WAV.';
+  } catch(e){
+    $('stAudio').textContent = '⚠️ Conversión fallida: ' + (e && e.message ? e.message : e);
+  }
+}
+
+
+/* =================== GENERADOR DE POWERPOINT (nucleo puro) =================== */
+var PPT_B64 = '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dDYueG1sLnJlbHNQSwECFAMUAAAACACsOeRcgGXhiLcAAAA2AQAALAAAAAAAAAAAAAAApIF+NwAAcHB0L3NsaWRlTGF5b3V0cy9fcmVscy9zbGlkZUxheW91dDMueG1sLnJlbHNQSwECFAMUAAAACACsOeRcgGXhiLcAAAA2AQAALAAAAAAAAAAAAAAApIF/OAAAcHB0L3NsaWRlTGF5b3V0cy9fcmVscy9zbGlkZUxheW91dDIueG1sLnJlbHNQSwECFAMUAAAACACsOeRcgGXhiLcAAAA2AQAALAAAAAAAAAAAAAAApIGAOQAAcHB0L3NsaWRlTGF5b3V0cy9fcmVscy9zbGlkZUxheW91dDgueG1sLnJlbHNQSwECFAMUAAAACACsOeRcgGXhiLcAAAA2AQAALQAAAAAAAAAAAAAApIGBOgAAcHB0L3NsaWRlTGF5b3V0cy9fcmVscy9zbGlkZUxheW91dDEwLnhtbC5yZWxzUEsBAhQDFAAAAAgArDnkXIBl4Yi3AAAANgEAACwAAAAAAAAAAAAAAKSBgzsAAHBwdC9zbGlkZUxheW91dHMvX3JlbHMvc2xpZGVMYXlvdXQ0LnhtbC5yZWxzUEsBAhQDFAAAAAgArDnkXIBl4Yi3AAAANgEAACwAAAAAAAAAAAAAAKSBhDwAAHBwdC9zbGlkZUxheW91dHMvX3JlbHMvc2xpZGVMYXlvdXQ5LnhtbC5yZWxzUEsBAhQDFAAAAAgArDnkXIBl4Yi3AAAANgEAACwAAAAAAAAAAAAAAKSBhT0AAHBwdC9zbGlkZUxheW91dHMvX3JlbHMvc2xpZGVMYXlvdXQxLnhtbC5yZWxzUEsBAhQDFAAAAAgArDnkXIBl4Yi3AAAANgEAAC0AAAAAAAAAAAAAAKSBhj4AAHBwdC9zbGlkZUxheW91dHMvX3JlbHMvc2xpZGVMYXlvdXQxMS54bWwucmVsc1BLAQIUAxQAAAAIAKw55FyAZeGItwAAADYBAAAsAAAAAAAAAAAAAACkgYg/AABwcHQvc2xpZGVMYXlvdXRzL19yZWxzL3NsaWRlTGF5b3V0NS54bWwucmVsc1BLAQIUAxQAAAAIAKw55FyAZeGItwAAADYBAAAsAAAAAAAAAAAAAACkgYlAAABwcHQvc2xpZGVMYXlvdXRzL19yZWxzL3NsaWRlTGF5b3V0Ny54bWwucmVsc1BLAQIUAxQAAAAIAKw55FymLaI17gYAANIuAAAhAAAAAAAAAAAAAACkgYpBAABwcHQvc2xpZGVNYXN0ZXJzL3NsaWRlTWFzdGVyMS54bWxQSwECFAMUAAAACACsOeRcGcvx+Q0BAADGBwAALAAAAAAAAAAAAAAApIG3SAAAcHB0L3NsaWRlTWFzdGVycy9fcmVscy9zbGlkZU1hc3RlcjEueG1sLnJlbHNQSwECFAMUAAAACACsOeRckwptdSEGAADnHQAAFAAAAAAAAAAAAAAApIEOSgAAcHB0L3RoZW1lL3RoZW1lMS54bWxQSwECFAMUAAAACACsOeRczPHtpPoAAABKAwAAHwAAAAAAAAAAAAAApIFhUAAAcHB0L19yZWxzL3ByZXNlbnRhdGlvbi54bWwucmVsc1BLAQIUAxQAAAAIAKw55FwDsJL26gAAAFACAAALAAAAAAAAAAAAAACkgZhRAABfcmVscy8ucmVsc1BLAQIUAxQAAAAIAKw55FyLFPzjeQEAANsCAAARAAAAAAAAAAAAAACkgatSAABkb2NQcm9wcy9jb3JlLnhtbFBLAQIUAxQAAAAIAKw55Fye0I557wEAAG0EAAAQAAAAAAAAAAAAAACkgVNUAABkb2NQcm9wcy9hcHAueG1sUEsFBgAAAAAiACIAdwoAAHBWAAAAAA==';
+var ICONO_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+function b64aU8(b){
+  var bin = atob(b);
+  var u = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function xmlDiapo(n, it, tieneAudio, durMs){
+  var W = 12192000, H = 6858000;
+  var esc = Math.min(W / it.w, H / it.h);
+  var cx = Math.round(it.w * esc), cy = Math.round(it.h * esc);
+  var x = Math.round((W - cx) / 2), y = Math.round((H - cy) / 2);
+  var s = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+  s += '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">';
+  s += '<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+  s += '<p:pic><p:nvPicPr><p:cNvPr id="2" name="Pagina ' + n + '"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+  if (tieneAudio){
+    s += '<p:pic><p:nvPicPr><p:cNvPr id="3" name="Narracion ' + n + '"><a:hlinkClick r:id="" action="ppaction://media"/></p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr><a:audioFile r:link="rId3"/><p:extLst><p:ext uri="{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}"><p14:media xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" r:embed="rId4"/></p:ext></p:extLst></p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="rId5"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="304800" cy="304800"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+  }
+  s += '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>';
+  s += '<p:transition spd="med" advClick="1" advTm="' + (durMs + 800) + '"/>';
+  if (tieneAudio){
+    s += '<p:timing><p:tnLst><p:par>' +
+      '<p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>' +
+      '<p:seq concurrent="1" nextAc="seek">' +
+      '<p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>' +
+      '<p:par><p:cTn id="3" fill="hold"><p:stCondLst><p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond></p:stCondLst><p:childTnLst>' +
+      '<p:par><p:cTn id="4" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>' +
+      '<p:par><p:cTn id="5" presetID="1" presetClass="mediacall" presetSubtype="0" fill="hold" nodeType="afterEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>' +
+      '<p:cmd type="call" cmd="playFrom(0.0)"><p:cBhvr><p:cTn id="6" dur="' + durMs + '" fill="hold"/><p:tgtEl><p:spTgt spid="3"/></p:tgtEl></p:cBhvr></p:cmd>' +
+      '</p:childTnLst></p:cTn></p:par>' +
+      '</p:childTnLst></p:cTn></p:par>' +
+      '</p:childTnLst></p:cTn></p:par>' +
+      '</p:childTnLst></p:cTn>' +
+      '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>' +
+      '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst>' +
+      '</p:seq>' +
+      '<p:audio><p:cMediaNode vol="80000"><p:cTn id="7" fill="hold" display="0"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:endCondLst><p:cond evt="onStopAudio" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:endCondLst></p:cTn><p:tgtEl><p:spTgt spid="3"/></p:tgtEl></p:cMediaNode></p:audio>' +
+      '</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>';
+  }
+  s += '</p:sld>';
+  return s;
+}
+function relsDiapo(n, tieneAudio){
+  var s = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  s += '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout7.xml"/>';
+  s += '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/img' + n + '.jpeg"/>';
+  if (tieneAudio){
+    s += '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/audio" Target="../media/aud' + n + '.mp3"/>';
+    s += '<Relationship Id="rId4" Type="http://schemas.microsoft.com/office/2007/relationships/media" Target="../media/aud' + n + '.mp3"/>';
+    s += '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/icono.png"/>';
+  }
+  s += '</Relationships>';
+  return s;
+}
+async function construirPPTX(JSZipRef, items){
+  var zip = await JSZipRef.loadAsync(b64aU8(PPT_B64));
+  zip.file('ppt/media/icono.png', b64aU8(ICONO_PNG));
+  var ct = await zip.file('[Content_Types].xml').async('string');
+  var pres = await zip.file('ppt/presentation.xml').async('string');
+  var rels = await zip.file('ppt/_rels/presentation.xml.rels').async('string');
+  var sldIds = '', sldRels = '', ctOv = '';
+  for (var i = 0; i < items.length; i++){
+    var n = i + 1, it = items[i];
+    zip.file('ppt/media/img' + n + '.jpeg', it.img);
+    if (it.audio) zip.file('ppt/media/aud' + n + '.mp3', it.audio);
+    zip.file('ppt/slides/slide' + n + '.xml', xmlDiapo(n, it, !!it.audio, it.durMs || 4000));
+    zip.file('ppt/slides/_rels/slide' + n + '.xml.rels', relsDiapo(n, !!it.audio));
+    sldIds += '<p:sldId id="' + (256 + n) + '" r:id="rIdS' + n + '"/>';
+    sldRels += '<Relationship Id="rIdS' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' + n + '.xml"/>';
+    ctOv += '<Override PartName="/ppt/slides/slide' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>';
+  }
+  zip.file('ppt/presentation.xml', pres.replace('<p:sldIdLst></p:sldIdLst>', '<p:sldIdLst>' + sldIds + '</p:sldIdLst>'));
+  zip.file('ppt/_rels/presentation.xml.rels', rels.replace('</Relationships>', sldRels + '</Relationships>'));
+  zip.file('[Content_Types].xml', ct.replace('</Types>', ctOv + '</Types>'));
+  return zip.generateAsync({type: 'uint8array', compression: 'DEFLATE'});
+}
+/* =================== FIN NUCLEO PPT =================== */
+
+/* =================== PESTAÑA PPT: flujo =================== */
+function sintetizarMp3Texto(texto){
+  var raw = MESPEAK.speak(texto, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
+  if (!raw) raw = MESPEAK.speak(texto, {rawdata: true, voice: 'es-la', speed: 150});
+  var d = wavAPcm(new Uint8Array(raw));
+  var enc = new LAMEJS.Mp3Encoder(1, d.sr, 64);
+  var parts = [], total = 0;
+  for (var j = 0; j < d.pcm.length; j += 1152){
+    var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
+    if (b.length){ parts.push(b); total += b.length; }
+  }
+  var f = enc.flush();
+  if (f.length){ parts.push(f); total += f.length; }
+  var u8 = new Uint8Array(total), off = 0;
+  for (var k = 0; k < parts.length; k++){ u8.set(parts[k], off); off += parts[k].length; }
+  return {u8: u8, durMs: Math.max(500, Math.round(d.pcm.length / d.sr * 1000))};
+}
+function durAudioArchivo(file){
+  return new Promise(function(res){
+    try {
+      var a = new Audio();
+      var u = URL.createObjectURL(file);
+      a.onloadedmetadata = function(){ URL.revokeObjectURL(u); res(isFinite(a.duration) ? a.duration : 0); };
+      a.onerror = function(){ URL.revokeObjectURL(u); res(0); };
+      a.src = u;
+    } catch(e){ res(0); }
+  });
+}
+function limpiarTextoOcr(t){
+  if (!t) return '';
+  t = t.replace(/[^0-9A-Za-zÁÉÍÓÚÑÜáéíóúñü¿?¡!.,;:()«»"'\- \n]/g, ' ');
+  var palabras = t.split(/\s+/).filter(function(w){
+    var letras = (w.match(/[A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g) || []).length;
+    if (letras >= 2) return true;
+    return /^(a|e|o|u|y|si|sí|no|el|la|lo|un|en|de|al|es|me|mi|te|tu|se|su|ya|ni|(\d+[.,]?\d*))$/i.test(w);
+  });
+  var res = palabras.join(' ').replace(/\s+([.,;:!?])/g, '$1').trim();
+  var letras2 = (res.match(/[A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g) || []).length;
+  if (res.length < 60 || palabras.length < 8 || letras2 / Math.max(1, res.length) < 0.55) return '';
+  return res;
+}
+var pptMp3Archivo = null;
+function repartirCortes(pesos, totalMuestras){
+  var suma = 0;
+  for (var i = 0; i < pesos.length; i++) suma += Math.max(1, pesos[i]);
+  var cortes = [], acum = 0;
+  for (var j = 0; j < pesos.length - 1; j++){
+    acum += Math.max(1, pesos[j]);
+    cortes.push(Math.round(totalMuestras * acum / suma));
+  }
+  return cortes;
+}
+function ajustarASilencio(pcm, corte, sr){
+  var V = Math.round(sr * 0.05), RADIO = Math.round(sr * 4);
+  var mejor = corte, mejorRms = Infinity;
+  var ini = Math.max(V, corte - RADIO), fin = Math.min(pcm.length - V, corte + RADIO);
+  for (var c = ini; c < fin; c += V){
+    var rms = 0;
+    for (var k = c; k < c + V; k++) rms += pcm[k] * pcm[k];
+    if (rms < mejorRms){ mejorRms = rms; mejor = c + (V >> 1); }
+  }
+  return mejor;
+}
+async function segmentarMp3(file, pesos){
+  var etapa = 'lectura del archivo';
+  try {
+  $('stAudio').textContent = '🎬 Decodificando el MP3 del libro…';
+  var ab = await new Promise(function(res, rej){
+    var rd = new FileReader();
+    rd.onload = function(){ res(rd.result); };
+    rd.onerror = function(){ rej(new Error('no pude leer el MP3')); };
+    rd.readAsArrayBuffer(file);
+  });
+  etapa = 'decodificación de audio';
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var ctx = new AC();
+  var buf = await ctx.decodeAudioData(ab);
+  etapa = 'preparación de canales';
+  var sr = buf.sampleRate;
+  var pcm = buf.getChannelData(0);
+  if (buf.numberOfChannels > 1){
+    var c2 = buf.getChannelData(1);
+    var mono = new Float32Array(pcm.length);
+    for (var m = 0; m < pcm.length; m++) mono[m] = (pcm[m] + c2[m]) / 2;
+    pcm = mono;
+  }
+  try { ctx.close(); } catch(e){}
+  etapa = 'cálculo de cortes';
+  var cortes = repartirCortes(pesos, pcm.length);
+  for (var q = 0; q < cortes.length; q++) cortes[q] = ajustarASilencio(pcm, cortes[q], sr);
+  cortes.sort(function(x, y){ return x - y; });
+  cortes.unshift(0); cortes.push(pcm.length);
+  for (var w = 1; w < cortes.length; w++){
+    if (cortes[w] < cortes[w-1]) cortes[w] = cortes[w-1];
+    if (cortes[w] > pcm.length) cortes[w] = pcm.length;
+  }
+  var segs = [];
+  for (var i = 0; i < pesos.length; i++){
+    etapa = 'codificación de la diapositiva ' + (i+1);
+    $('stAudio').textContent = '🎬 Segmentando audio: diapositiva ' + (i+1) + ' de ' + pesos.length + '…';
+    await new Promise(function(r){ setTimeout(r, 0); });
+    var iniC = Math.max(0, Math.min(cortes[i], pcm.length));
+    var finC = Math.max(iniC, Math.min(cortes[i+1], pcm.length));
+    var trozo = pcm.subarray(iniC, finC);
+    var i16 = new Int16Array(trozo.length);
+    for (var t = 0; t < trozo.length; t++){
+      var v = Math.max(-1, Math.min(1, trozo[t]));
+      i16[t] = Math.round(v * 32767);
+    }
+    var enc = new LAMEJS.Mp3Encoder(1, sr, 64);
+    var parts = [], total = 0;
+    for (var j2 = 0; j2 < i16.length; j2 += 1152){
+      var b2 = enc.encodeBuffer(i16.subarray(j2, Math.min(j2 + 1152, i16.length)));
+      if (b2.length){ parts.push(b2); total += b2.length; }
+    }
+    var fl = enc.flush();
+    if (fl.length){ parts.push(fl); total += fl.length; }
+    var u8 = new Uint8Array(total), off = 0;
+    for (var k2 = 0; k2 < parts.length; k2++){ u8.set(parts[k2], off); off += parts[k2].length; }
+    if (trozo.length < sr * 0.2 || u8.length < 200) segs.push({u8: null, durMs: 1500});
+    else segs.push({u8: u8, durMs: Math.round(trozo.length / sr * 1000)});
+  }
+  return segs;
+  } catch(eSeg){
+    throw new Error('[' + etapa + '] ' + (eSeg && eSeg.message ? eSeg.message : eSeg));
+  }
+}
+async function generarPPT(){
+  if (!imgs.length){
+    $('stAudio').textContent = '📷 Primero carga las páginas del libro en la pestaña "Imágenes → PDF".';
+    return;
+  }
+  $('btnPPT').disabled = true;
+  try {
+    if (!window.JSZip){
+      $('stAudio').textContent = '⬇ Descargando ensamblador PPT…';
+      await cargarScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    }
+    if (!window.Tesseract){
+      $('stAudio').textContent = '⬇ Descargando lector OCR (solo la primera vez)…';
+      await cargarScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    }
+    if (!TESS) TESS = await window.Tesseract.createWorker('spa');
+    if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+    LAMEJS = window.lamejs;
+    var conMp3 = !!pptMp3Archivo;
+    if (!conMp3) await prepararTTS();
+    var datos = [], textos = [], pesos = [];
+    for (var i = 0; i < imgs.length; i++){
+      $('stAudio').textContent = '🔍 Leyendo página ' + (i+1) + ' de ' + imgs.length + ' (OCR)…';
+      await new Promise(function(r){ setTimeout(r, 0); });
+      var durl = await rotadaDataUrl(imgs[i]);
+      var el = await cargarImg(durl);
+      var r1 = await TESS.recognize(durl);
+      var texto = limpiarTextoOcr((r1 && r1.data && r1.data.text) ? r1.data.text : '');
+      textos.push(texto);
+      pesos.push(Math.max(20, texto.length));
+      datos.push({img: b64aU8(durl.split(',')[1]), w: el.naturalWidth, h: el.naturalHeight});
+    }
+    var items = [];
+    if (conMp3){
+      var segs = null;
+      try {
+        segs = await segmentarMp3(pptMp3Archivo, pesos);
+      } catch(eS){
+        $('stAudio').textContent = '⚠️ No pude segmentar el MP3 ' + (eS && eS.message ? eS.message : '') + ' — continúo narrando por síntesis…';
+        await new Promise(function(r){ setTimeout(r, 1500); });
+        conMp3 = false;
+        pptMp3Archivo = null;
+        await prepararTTS();
+      }
+      if (segs){
+        for (var a1 = 0; a1 < datos.length; a1++){
+          items.push({img: datos[a1].img, w: datos[a1].w, h: datos[a1].h, audio: segs[a1].u8, durMs: segs[a1].durMs});
+        }
+      }
+    }
+    if (!conMp3){
+      for (var a2 = 0; a2 < datos.length; a2++){
+        var audioU8 = null, durMs = 4000;
+        if (textos[a2]){
+          $('stAudio').textContent = '🎤 Narrando diapositiva ' + (a2+1) + ' de ' + datos.length + '…';
+          await new Promise(function(r){ setTimeout(r, 0); });
+          var sm = sintetizarMp3Texto(textos[a2]);
+          audioU8 = sm.u8; durMs = sm.durMs;
+        }
+        items.push({img: datos[a2].img, w: datos[a2].w, h: datos[a2].h, audio: audioU8, durMs: durMs});
+      }
+    }
+    $('stAudio').textContent = '🎞 Ensamblando la presentación…';
+    await new Promise(function(r){ setTimeout(r, 0); });
+    var u8 = await construirPPTX(window.JSZip, items);
+    var nombre = ((libroActualNombre || 'presentacion').replace(/[^\w áéíóúñÁÉÍÓÚÑüÜ.-]/g, '').trim() || 'presentacion');
+    var blob = new Blob([u8], {type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = nombre + '.pptx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
+    $('stAudio').textContent = '✅ «' + nombre + '.pptx» descargado: ' + items.length + ' diapositivas narradas con avance automático' + (conMp3 ? ', usando tu MP3 segmentado por página.' : ' (voz sintética). 💡 Para usar la voz del MP3 del libro: arrastra ese .mp3 sobre esta ventana y vuelve a pulsar 🎞.');
+    pptMp3Archivo = null;
+  } catch(e){
+    $('stAudio').textContent = '❌ PPT: ' + (e && e.message ? e.message : e);
+    pptMp3Archivo = null;
+  }
+  $('btnPPT').disabled = false;
+}
+
+/* =================== ENLACE DE EVENTOS =================== */
+function init(){
+  mostrarBienvenida();
+  cargarVoces();
+  if (TTS && typeof window.speechSynthesis.addEventListener === 'function'){
+    window.speechSynthesis.addEventListener('voiceschanged', cargarVoces);
+  } else if (TTS) {
+    window.speechSynthesis.onvoiceschanged = cargarVoces;
+  }
+
+  $('selVoz').onchange = function(){ lsSet('vozLibro', this.value); };
+  $('rate').oninput = function(){ $('rateVal').textContent = parseFloat(this.value).toFixed(2); lsSet('rateLibro', this.value); };
+  var rG = lsGet('rateLibro');
+  if (rG){ $('rate').value = rG; $('rateVal').textContent = parseFloat(rG).toFixed(2); }
+
+  $('btnPlay').onclick = function(){ iniciar(idxActual < 0 ? 0 : idxActual); };
+  $('btnStop').onclick = function(){ detener(); idxActual = -1; $('stAudio').textContent = 'Detenido.'; };
+  $('btnPause').onclick = function(){
+    if (!TTS) return;
+    if (!pausado){ pausado = true; window.speechSynthesis.pause(); this.textContent = '▶ Continuar'; $('stAudio').textContent = 'En pausa.'; }
+    else { pausado = false; window.speechSynthesis.resume(); this.textContent = '⏸ Pausa'; }
+  };
+  $('selLibro').onchange = function(){ cargarLibroSel(this.value); };
+  $('btnMp3Gen').onclick = generarMp3;
+  probarBridge();
+
+  var tabs = document.querySelectorAll('.tab');
+  for (var i = 0; i < tabs.length; i++){
+    tabs[i].onclick = function(){ activarTab(this); };
+  }
+
+  $('drop').onclick = function(){ $('fileIn').click(); };
+  $('drop').ondragover = function(e){ e.preventDefault(); this.classList.add('over'); };
+  $('drop').ondragleave = function(){ this.classList.remove('over'); };
+  $('drop').ondrop = function(e){ e.preventDefault(); this.classList.remove('over'); if (e.dataTransfer && e.dataTransfer.files) agregar(e.dataTransfer.files); };
+  $('fileIn').onchange = function(){ if (this.files) agregar(this.files); this.value = ''; };
+
+  $('btnLimpiar').onclick = function(){ imgs = []; renderGrid(); $('stPdf').textContent = ''; $('linkPDF').style.display = 'none'; };
+  $('btnGirarTodo').onclick = function(){ for (var i = 0; i < imgs.length; i++) imgs[i].rot = (imgs[i].rot + 90) % 360; renderGrid(); };
+  $('btnPDF').onclick = generarPDF;
+  $('btnPPT').onclick = generarPPT;
+
+  /* Soltar un .wav en cualquier parte de la página lo convierte a MP3 (respaldo invisible) */
+  window.addEventListener('dragover', function(e){ e.preventDefault(); });
+  window.addEventListener('drop', function(e){
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+      var f = e.dataTransfer.files[0];
+      if (/\.wav$/i.test(f.name)){ e.preventDefault(); convertirWav(f); }
+      else if (/\.mp3$/i.test(f.name)){ e.preventDefault(); pptMp3Archivo = f; $('stAudio').textContent = '🎬 MP3 «' + f.name + '» listo: pulsa 🎞 Generar PPT y se segmentará una parte por diapositiva.'; }
+    }
+  });
+
+  window.addEventListener('beforeunload', function(){ if (TTS) window.speechSynthesis.cancel(); });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+</script>
+</body>
+</html>
