@@ -45,7 +45,7 @@
 <body>
 <div id="errbar"></div>
 <h1>📖 Audiolibro y PDF de libros</h1>
-<div class="sub">Escucha el libro con voz natural y convierte fotos de páginas en un PDF ordenado. <span style="color:#b3a68f">· versión 13 · GitHub ·</span></div>
+<div class="sub">Escucha el libro con voz natural y convierte fotos de páginas en un PDF ordenado. <span style="color:#b3a68f">· versión 13 ·</span></div>
 
 <div class="tabs">
   <div class="tab active" data-p="audio">🎧 Audiolibro</div>
@@ -64,12 +64,12 @@
     </div>
     <div class="controls" style="margin-top:8px">
       <label>📖 Libro: <select id="selLibro"><option value="NONE">— Selecciona un libro —</option><option value="EMBED">EL PROYECTO de las Hermanas de la Providencia</option></select></label>
-      <button id="btnMp3Gen" title="Descarga el MP3 del libro (usa la voz de Windows si ya fue creada)">⬇ Descargar MP3</button>
-      <button id="btnPPT" title="Crea una presentación PowerPoint narrada: una diapositiva por página, avanza al ritmo de la lectura">🎞 Generar PPT</button>
+      <button id="btnMp3Gen" title="Descarga el MP3 del libro con la voz elegida arriba">⬇ Descargar MP3</button>
+      <button id="btnPPT" title="Crea una presentación PowerPoint narrada con la voz elegida arriba: una diapositiva por página, avanza al ritmo de la lectura">🎞 Generar PPT</button>
     </div>
     <div class="status" id="stModo">⏳ Verificando conexión con Cowork…</div>
     <div class="status" id="stAudio">Haz clic en cualquier párrafo para comenzar a leer desde ahí.</div>
-    <div class="nota">💡 Se priorizan voces en <b>español de Colombia (es-CO)</b> si están instaladas en tu equipo (Configuración → Hora e idioma → Voz). Los libros nuevos entran por la pestaña <b>"Imágenes → PDF"</b>: al generar el PDF, su transcripción se crea sola (OCR en español) y el libro queda listo para escuchar aquí. Con <b>🎤 Generar MP3</b> creas su audio exportable. Funciona tanto en Cowork como abriendo este archivo en tu navegador con internet: PDF, transcripción y MP3, todo autónomo. Para que <b>⬇ Descargar MP3</b> suene con la <b>voz de Windows (Helena)</b>: una sola vez por libro, arrastra su .txt sobre «Crear MP3 con voz de Windows.bat» (en LIBROS); desde entonces el botón entrega esa versión automáticamente.</div>
+    <div class="nota">💡 Elige la <b>voz</b> (Salome o Gonzalo, voces neuronales de alta calidad): se aplica siempre, tanto para escuchar aquí como para lo que descargues (<b>MP3</b> o <b>PPT</b>). Requiere <b>conexión a internet</b> siempre (la voz se genera en la nube, no queda instalada en tu equipo). Los libros nuevos entran por la pestaña <b>"Imágenes → PDF"</b>: al generar el PDF, su transcripción se crea sola (OCR en español) y el libro queda listo para escuchar aquí.</div>
   </div>
   <div id="texto"></div>
 </div>
@@ -215,9 +215,17 @@ var LIBRO = [
  ["p","Santa y amable Providencia, te doy gracias por todos los cuidados caritativos que has querido prodigarle a una criatura tan pequeña y débil como yo. Te ruego humilde e insistentemente que continúes prodigándomelos. Conduce todos mis pasos, regula todas mis acciones, gobiérname en todos los momentos de mi vida; dispón de mí y de todo lo que me pertenece como te plazca, para tu mayor gloria y para mi salvación. Amén."]
 ];
 
-/* =================== AUDIO (speechSynthesis) =================== */
-var TTS = (typeof window.speechSynthesis !== 'undefined');
-var parrafos = [], idxActual = -1, leyendo = false, pausado = false;
+/* =================== AUDIO (voz neuronal Edge-TTS gratuito, 2 voces) =================== */
+var LISTA_VOCES = [
+  {id: 'es-CO-SalomeNeural',  nombre: '🎙 Salome (Colombia, mujer)', espeak: 'es-419'},
+  {id: 'es-CO-GonzaloNeural', nombre: '🎙 Gonzalo (Colombia, hombre)', espeak: 'es-419+m3'}
+];
+function vozActual(){
+  var id = $('selVoz') ? $('selVoz').value : '';
+  for (var i = 0; i < LISTA_VOCES.length; i++) if (LISTA_VOCES[i].id === id) return LISTA_VOCES[i];
+  return LISTA_VOCES[0];
+}
+var parrafos = [], idxActual = -1, leyendo = false, pausado = false, audioActual = null;
 
 function renderTexto(items){
   var cont = $('texto'); cont.innerHTML = ''; parrafos = [];
@@ -235,54 +243,67 @@ function renderTexto(items){
   }
 }
 
-var voces = [];
 function cargarVoces(){
   var sel = $('selVoz'); sel.innerHTML = '';
-  if (!TTS){
-    var oNo = document.createElement('option'); oNo.textContent = 'Voz no disponible aquí'; sel.appendChild(oNo);
-    return;
-  }
-  voces = window.speechSynthesis.getVoices().filter(function(v){ return v.lang.toLowerCase().indexOf('es') === 0; });
-  var orden = ['es-co','es-us','es-mx','es-419','es-es'];
-  voces.sort(function(a,b){
-    var ia = orden.indexOf(a.lang.toLowerCase()); if (ia < 0) ia = 9;
-    var ib = orden.indexOf(b.lang.toLowerCase()); if (ib < 0) ib = 9;
-    return ia - ib;
-  });
-  for (var i = 0; i < voces.length; i++){
-    var o = document.createElement('option'); o.value = String(i);
-    o.textContent = voces[i].name + ' (' + voces[i].lang + ')' + (voces[i].lang.toLowerCase() === 'es-co' ? ' ★ Colombia' : '');
+  for (var i = 0; i < LISTA_VOCES.length; i++){
+    var o = document.createElement('option'); o.value = LISTA_VOCES[i].id; o.textContent = LISTA_VOCES[i].nombre;
     sel.appendChild(o);
   }
   var g = lsGet('vozLibro');
-  if (g !== null && Number(g) < voces.length) sel.value = g;
-  if (!voces.length){ var o2 = document.createElement('option'); o2.textContent = 'Sin voces en español detectadas'; sel.appendChild(o2); }
+  if (g && LISTA_VOCES.some(function(v){ return v.id === g; })) sel.value = g;
 }
 
-function hablarParrafo(i){
+var tokenLectura = 0; /* se incrementa cada vez que arranca o se detiene una sesión de lectura, para invalidar solicitudes de voz que queden "en vuelo" y evitar audio superpuesto */
+function detenerAudioActual(){
+  if (audioActual){
+    try { audioActual.onended = null; audioActual.onerror = null; audioActual.pause(); } catch(e){}
+    audioActual = null;
+  }
+}
+async function hablarParrafo(i){
   if (i >= parrafos.length){ detener(); $('stAudio').textContent = '✅ Lectura terminada.'; return; }
+  var miToken = tokenLectura;
   idxActual = i;
   for (var j = 0; j < parrafos.length; j++) parrafos[j].classList.remove('hablando');
   parrafos[i].classList.add('hablando');
   try { parrafos[i].scrollIntoView({block:'center', behavior:'smooth'}); } catch(e){ parrafos[i].scrollIntoView(); }
   $('stAudio').textContent = 'Leyendo párrafo ' + (i+1) + ' de ' + parrafos.length + '…';
-  var u = new SpeechSynthesisUtterance(parrafos[i].textContent);
-  var v = voces[Number($('selVoz').value)];
-  if (v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'es-CO'; }
-  u.rate = parseFloat($('rate').value);
-  u.onend = function(){ if (leyendo && !pausado) hablarParrafo(i+1); };
-  window.speechSynthesis.speak(u);
+  /* Corta cualquier audio que aún estuviera sonando antes de pedir el siguiente, para
+     que nunca se solapen dos lecturas (aunque el usuario pulse rápido varias veces). */
+  detenerAudioActual();
+  try {
+    var voz = vozActual();
+    var u8 = await sintetizarVoz(parrafos[i].textContent, voz.id, $('rate').value);
+    /* Si mientras esperábamos la voz el usuario detuvo o arrancó otra lectura,
+       esta respuesta quedó obsoleta: la descartamos en vez de reproducirla. */
+    if (miToken !== tokenLectura || !leyendo) return;
+    var blob = new Blob([u8], {type: 'audio/mpeg'});
+    var url = URL.createObjectURL(blob);
+    var au = new Audio(url);
+    detenerAudioActual();
+    audioActual = au;
+    au.onended = function(){ URL.revokeObjectURL(url); if (leyendo && !pausado && miToken === tokenLectura) hablarParrafo(i+1); };
+    au.onerror = function(){ URL.revokeObjectURL(url); if (leyendo && !pausado && miToken === tokenLectura) hablarParrafo(i+1); };
+    if (miToken !== tokenLectura || !leyendo) { try { au.pause(); } catch(eP){} URL.revokeObjectURL(url); return; }
+    await au.play();
+  } catch(eLee){
+    if (miToken !== tokenLectura) return;
+    $('stAudio').textContent = '⚠️ No se pudo leer: ' + (eLee && eLee.message ? eLee.message : eLee);
+    detener();
+  }
 }
 function iniciar(desde){
   if (!parrafos.length){ $('stAudio').textContent = '📚 Primero genera un PDF en «Imágenes → PDF» o selecciona un libro de la lista.'; return; }
-  if (!TTS){ $('stAudio').textContent = '⚠️ Este entorno no permite síntesis de voz. Abre este archivo en Chrome/Edge o escucha el MP3 de la carpeta.'; return; }
+  tokenLectura++;
+  detenerAudioActual();
   leyendo = true; pausado = false;
   $('btnPlay').disabled = true; $('btnPause').disabled = false; $('btnStop').disabled = false;
   hablarParrafo(typeof desde === 'number' ? desde : Math.max(idxActual, 0));
 }
 function detener(){
+  tokenLectura++;
   leyendo = false; pausado = false;
-  if (TTS) window.speechSynthesis.cancel();
+  detenerAudioActual();
   for (var j = 0; j < parrafos.length; j++) parrafos[j].classList.remove('hablando');
   $('btnPlay').disabled = false; $('btnPause').disabled = true; $('btnStop').disabled = true;
   $('btnPause').textContent = '⏸ Pausa';
@@ -522,7 +543,7 @@ function aplicarModo(){
     $('stModo').textContent = '🟢 Automatización Cowork activa: OCR automático, biblioteca y MP3 disponibles.';
     poblarSelector().then(restaurarUltimo);
   } else {
-    $('stModo').textContent = '🌐 Modo navegador: PDF, transcripción OCR y MP3 se generan y descargan aquí mismo (necesita internet para cargar los motores la primera vez).';
+    $('stModo').textContent = '🌐 Modo navegador: PDF y transcripción OCR se generan aquí mismo (internet solo la primera vez). La voz (pantalla, MP3 y PPT) siempre requiere conexión, ya que se genera en la nube.';
   }
 }
 function restaurarUltimo(){
@@ -693,9 +714,10 @@ async function generarMp3(){
   if (!hayBridge()){ await mp3Navegador(); return; }
   if (!libroActualNombre){ $('stAudio').textContent = '🎤 Primero selecciona o genera un libro.'; return; }
   var nom = libroActualNombre.replace(/"/g, '');
+  var vozEspeak = vozActual().espeak;
   $('stAudio').textContent = '🎤 Generando MP3 de «' + nom + '»… puede tardar un minuto.';
   try {
-    var out = await bashArt(BOOT + '; d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); sub=$(find "$d" -maxdepth 1 -type d -iname "' + nom + '" 2>/dev/null | head -1); if [ -z "$sub" ]; then sub="$d"; fi; mp3=$(ls "$sub"/*.mp3 2>/dev/null | head -1); txt=$(ls "$sub"/*.txt 2>/dev/null | head -1); if [ -n "$mp3" ]; then echo "YA|$(basename "$mp3")"; elif [ -z "$txt" ]; then echo NOTXT; else export LD_LIBRARY_PATH=/tmp/es/usr/lib/x86_64-linux-gnu; /tmp/es/usr/bin/espeak-ng -v es-419 -s 150 --path=/tmp/es/usr/lib/x86_64-linux-gnu/espeak-ng-data -f "$txt" -w /tmp/olibro.wav 2>/dev/null && ffmpeg -y -i /tmp/olibro.wav -codec:a libmp3lame -b:a 64k "$sub/' + nom + ' - Audiolibro.mp3" >/dev/null 2>&1 && rm -f /tmp/olibro.wav && echo HECHO; fi');
+    var out = await bashArt(BOOT + '; d=$(ls -d /sessions/*/mnt/LIBROS 2>/dev/null | head -1); sub=$(find "$d" -maxdepth 1 -type d -iname "' + nom + '" 2>/dev/null | head -1); if [ -z "$sub" ]; then sub="$d"; fi; mp3=$(ls "$sub"/*.mp3 2>/dev/null | head -1); txt=$(ls "$sub"/*.txt 2>/dev/null | head -1); if [ -n "$mp3" ]; then echo "YA|$(basename "$mp3")"; elif [ -z "$txt" ]; then echo NOTXT; else export LD_LIBRARY_PATH=/tmp/es/usr/lib/x86_64-linux-gnu; /tmp/es/usr/bin/espeak-ng -v ' + vozEspeak + ' -s 150 --path=/tmp/es/usr/lib/x86_64-linux-gnu/espeak-ng-data -f "$txt" -w /tmp/olibro.wav 2>/dev/null && ffmpeg -y -i /tmp/olibro.wav -codec:a libmp3lame -b:a 64k "$sub/' + nom + ' - Audiolibro.mp3" >/dev/null 2>&1 && rm -f /tmp/olibro.wav && echo HECHO; fi');
     if (out.indexOf('YA|') >= 0){ $('stAudio').textContent = '🎵 Este libro ya tiene su MP3: «' + out.split('|')[1] + '» está en su carpeta de LIBROS.'; }
     else if (out.indexOf('HECHO') >= 0) $('stAudio').textContent = '✅ MP3 creado: «' + nom + ' - Audiolibro.mp3» quedó en la carpeta del libro.';
     else if (out.indexOf('NOTXT') >= 0) $('stAudio').textContent = '⚠️ Este libro aún no tiene transcripción: genera primero su PDF (el OCR la crea sola).';
@@ -703,8 +725,10 @@ async function generarMp3(){
   } catch(e){ $('stAudio').textContent = '⚠️ Error generando MP3: ' + (e && e.message ? e.message : e); }
 }
 
-/* =================== MP3 y OCR AUTÓNOMOS EN EL NAVEGADOR (CDN) =================== */
-var MESPEAK = null, LAMEJS = null, TESS = null;
+/* =================== VOZ NEURONAL (Edge-TTS de Microsoft, gratis, vía Cloudflare Worker) =================== */
+/* ⚠️ CONFIGURACIÓN: reemplaza esta URL por la de tu propio Cloudflare Worker (ver instrucciones). No requiere cuenta de Azure ni clave alguna. */
+var VOZ_PROXY_URL = 'https://hidden-voice-cf5a.marino-mpm.workers.dev';
+var LAMEJS = null, TESS = null;
 function cargarScript(url){
   return new Promise(function(res, rej){
     var sc = document.createElement('script');
@@ -714,54 +738,29 @@ function cargarScript(url){
     document.head.appendChild(sc);
   });
 }
-function evalCJS(codigo, deps){
-  var module = {exports:{}};
-  (new Function('module', 'exports', 'require', codigo))(module, module.exports, function(n){ return deps[n]; });
-  return module.exports;
-}
-async function fetchTexto(url){
-  var r = await fetch(url);
-  if (!r.ok) throw new Error('descarga falló (' + r.status + ')');
-  return r.text();
-}
-async function prepararTTS(){
-  if (MESPEAK && LAMEJS) return;
-  var etapa = 'descarga del codificador MP3';
+async function sintetizarVoz(texto, vozId, rate){
+  if (!VOZ_PROXY_URL || VOZ_PROXY_URL.indexOf('TU-WORKER') >= 0){
+    throw new Error('Falta configurar VOZ_PROXY_URL en el código (ver instrucciones de configuración del Worker)');
+  }
+  var ratePct = Math.round((parseFloat(rate || 1) - 1) * 100);
+  var resp;
   try {
-    $('stAudio').textContent = '⬇ Descargando motor de voz (solo la primera vez, ~2 MB)…';
-    var base = 'https://cdn.jsdelivr.net/npm/mespeak@2.0.2';
-    if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
-    LAMEJS = window.lamejs;
-    etapa = 'carga del núcleo de voz (ESpeak.js)';
-    var esp = evalCJS(await fetchTexto(base + '/src/ESpeak.js'), {});
-    etapa = 'carga del núcleo de voz (index.js)';
-    MESPEAK = evalCJS(await fetchTexto(base + '/src/index.js'), {'./ESpeak.js': esp});
-    etapa = 'carga de configuración de voz';
-    MESPEAK.loadConfig(JSON.parse(await fetchTexto(base + '/src/mespeak_config.json')));
-    etapa = 'carga de la voz en español';
-    MESPEAK.loadVoice(JSON.parse(await fetchTexto(base + '/voices/es-la.json')));
-  } catch(eTTS){
-    MESPEAK = null;
-    throw new Error('[' + etapa + '] ' + (eTTS && eTTS.message ? eTTS.message : eTTS));
+    resp = await fetch(VOZ_PROXY_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto: texto, voz: vozId, ratePct: ratePct})
+    });
+  } catch(eNet){
+    throw new Error('no se pudo contactar el servicio de voz (revisa tu conexión): ' + (eNet && eNet.message ? eNet.message : eNet));
   }
-}
-function wavAPcm(u8){
-  if (!u8 || !u8.byteLength || u8.byteLength < 44) throw new Error('el motor de voz no devolvió audio válido (respuesta vacía o demasiado corta)');
-  var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-  var sr = dv.getUint32(24, true);
-  var off = 12;
-  while (off < u8.length - 8){
-    var id = String.fromCharCode(u8[off], u8[off+1], u8[off+2], u8[off+3]);
-    var sz = dv.getUint32(off + 4, true);
-    if (id === 'data'){
-      var disponible = u8.byteLength - (off + 8);
-      var szSeguro = Math.max(0, Math.min(sz, disponible));
-      if (szSeguro < 4) throw new Error('el motor de voz devolvió un audio corrupto (bloque de datos WAV inválido)');
-      return {pcm: new Int16Array(u8.buffer, u8.byteOffset + off + 8, szSeguro >> 1), sr: sr};
-    }
-    off += 8 + sz + (sz % 2);
+  if (!resp.ok){
+    var msg = '';
+    try { msg = await resp.text(); } catch(e2){}
+    throw new Error('el servicio de voz respondió con error ' + resp.status + (msg ? ': ' + msg.slice(0,200) : ''));
   }
-  throw new Error('WAV sin bloque de datos');
+  var buf = await resp.arrayBuffer();
+  if (!buf || buf.byteLength < 100) throw new Error('el servicio de voz devolvió un audio vacío');
+  return new Uint8Array(buf);
 }
 function sondearAudio(url){
   return new Promise(function(res){
@@ -778,9 +777,14 @@ function sondearAudio(url){
   });
 }
 async function mp3VozWindows(){
-  /* Busca el MP3 creado con la voz de Windows junto al libro (solo al abrir el archivo desde la carpeta LIBROS) */
-  var esquemaOk = (location.protocol === 'file:' || location.protocol === 'http:' || location.protocol === 'https:');
-  if (!esquemaOk || !libroActualNombre) return false;
+  /* NOTA: esta función ya NO se llama automáticamente desde «Descargar MP3» (ver mp3Navegador).
+     Antes intentaba, en modo navegador (file:), servir un .mp3 viejo creado con la voz de
+     Windows si encontraba uno junto al libro — pero eso ignoraba en silencio la voz elegida
+     en el listbox (Salome/Gonzalo), y además el atributo "download" no funciona de forma
+     confiable sobre rutas file:// en Chrome: en vez de descargar, el navegador termina
+     navegando al audio (pantalla en negro reproduciéndolo, sin opción real de guardarlo).
+     Se deja la función por si se quiere reactivar como una opción aparte y explícita. */
+  if (location.protocol !== 'file:' || !libroActualNombre) return false;
   var carpeta = encodeURIComponent(libroActualNombre);
   var candidatos = [
     carpeta + '/' + encodeURIComponent(libroActualNombre) + '.mp3',
@@ -799,31 +803,18 @@ async function mp3VozWindows(){
   return false;
 }
 async function mp3Navegador(){
-  if (await mp3VozWindows()) return;
+  /* «Descargar MP3» siempre respeta la voz elegida arriba (Salome/Gonzalo): ya no se
+     desvía en silencio hacia un .mp3 viejo de la voz de Windows aunque exista uno. */
   if (!parrafos.length){ $('stAudio').textContent = '📚 Primero carga o genera un libro.'; return; }
   try {
-    await prepararTTS();
+    var voz = vozActual();
     var nombre = ((libroActualNombre || 'audiolibro').replace(/[^\w áéíóúñÁÉÍÓÚÑüÜ.-]/g, '').trim() || 'audiolibro');
-    var enc = null, parts = [], sr = 22050;
+    var parts = [];
     for (var i = 0; i < parrafos.length; i++){
       $('stAudio').textContent = '🎤 Creando MP3: párrafo ' + (i+1) + ' de ' + parrafos.length + '…';
-      await new Promise(function(r){ setTimeout(r, 0); });
-      var raw = MESPEAK.speak(parrafos[i].textContent, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
-      if (!raw) raw = MESPEAK.speak(parrafos[i].textContent, {rawdata: true, voice: 'es-la', speed: 150});
-      var d = wavAPcm(new Uint8Array(raw));
-      if (!enc){ sr = d.sr; enc = new LAMEJS.Mp3Encoder(1, sr, 64); }
-      for (var j = 0; j < d.pcm.length; j += 1152){
-        var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
-        if (b.length) parts.push(new Uint8Array(b));
-      }
-      var sil = new Int16Array(Math.floor(sr * 0.35));
-      for (var k = 0; k < sil.length; k += 1152){
-        var b2 = enc.encodeBuffer(sil.subarray(k, Math.min(k + 1152, sil.length)));
-        if (b2.length) parts.push(new Uint8Array(b2));
-      }
+      var u8 = await sintetizarVoz(parrafos[i].textContent, voz.id, $('rate').value);
+      parts.push(u8);
     }
-    var fin = enc.flush();
-    if (fin.length) parts.push(new Uint8Array(fin));
     var blob = new Blob(parts, {type: 'audio/mpeg'});
     var a = document.createElement('a');
     var urlB = URL.createObjectURL(blob);
@@ -1022,26 +1013,20 @@ async function construirPPTX(JSZipRef, items){
 /* =================== FIN NUCLEO PPT =================== */
 
 /* =================== PESTAÑA PPT: flujo =================== */
-function sintetizarMp3Texto(texto){
+async function sintetizarMp3Texto(texto, vozId, rate){
   var etapa = 'síntesis de voz';
   try {
-    var raw = MESPEAK.speak(texto, {rawdata: 'arraybuffer', voice: 'es-la', speed: 150});
-    if (!raw) raw = MESPEAK.speak(texto, {rawdata: true, voice: 'es-la', speed: 150});
-    if (!raw) throw new Error('el motor de voz no generó audio para este texto');
-    etapa = 'conversión de audio a PCM';
-    var d = wavAPcm(new Uint8Array(raw));
-    etapa = 'codificación a MP3';
-    var enc = new LAMEJS.Mp3Encoder(1, d.sr, 64);
-    var parts = [], total = 0;
-    for (var j = 0; j < d.pcm.length; j += 1152){
-      var b = enc.encodeBuffer(d.pcm.subarray(j, Math.min(j + 1152, d.pcm.length)));
-      if (b.length){ parts.push(b); total += b.length; }
-    }
-    var f = enc.flush();
-    if (f.length){ parts.push(f); total += f.length; }
-    var u8 = new Uint8Array(total), off = 0;
-    for (var k = 0; k < parts.length; k++){ u8.set(parts[k], off); off += parts[k].length; }
-    return {u8: u8, durMs: Math.max(500, Math.round(d.pcm.length / d.sr * 1000))};
+    var u8 = await sintetizarVoz(texto, vozId, rate);
+    etapa = 'cálculo de duración del audio';
+    var durMs = 4000;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      var ctx = new AC();
+      var ab = await ctx.decodeAudioData(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+      durMs = Math.max(500, Math.round(ab.duration * 1000));
+      try { ctx.close(); } catch(eC){}
+    } catch(eDur){ /* si no se puede calcular, se usa el valor por defecto */ }
+    return {u8: u8, durMs: durMs};
   } catch(eSyn){
     throw new Error('[' + etapa + '] ' + (eSyn && eSyn.message ? eSyn.message : eSyn));
   }
@@ -1069,6 +1054,29 @@ function limpiarTextoOcr(t){
   var letras2 = (res.match(/[A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g) || []).length;
   if (res.length < 60 || palabras.length < 8 || letras2 / Math.max(1, res.length) < 0.55) return '';
   return res;
+}
+/* Divide un texto YA VALIDADO en tantos trozos como pesos.length, respetando el tamaño
+   relativo de cada peso (largo del OCR de esa página) y cortando siempre en un espacio
+   para no partir palabras. Se usa para narrar el PPT con el mismo texto que ya se
+   verificó en la pestaña Audiolibro, en vez de repetir el OCR por separado. */
+function partirTextoPorPesos(texto, pesos){
+  texto = (texto || '').replace(/\s+/g, ' ').trim();
+  var partes = [];
+  if (!texto || !pesos.length) { for (var z = 0; z < pesos.length; z++) partes.push(''); return partes; }
+  var suma = 0;
+  for (var i = 0; i < pesos.length; i++) suma += Math.max(1, pesos[i]);
+  var pos = 0, acum = 0;
+  for (var j = 0; j < pesos.length; j++){
+    acum += Math.max(1, pesos[j]);
+    var fin = (j === pesos.length - 1) ? texto.length : Math.round(texto.length * acum / suma);
+    if (fin < texto.length){
+      var sp = texto.indexOf(' ', fin);
+      fin = (sp === -1) ? texto.length : sp;
+    }
+    partes.push(texto.slice(pos, fin).trim());
+    pos = fin + 1;
+  }
+  return partes;
 }
 var pptMp3Archivo = null;
 function repartirCortes(pesos, totalMuestras){
@@ -1175,7 +1183,6 @@ async function generarPPT(){
     if (!window.lamejs) await cargarScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
     LAMEJS = window.lamejs;
     var conMp3 = !!pptMp3Archivo;
-    if (!conMp3) await prepararTTS();
     var datos = [], textos = [], pesos = [];
     for (var i = 0; i < imgs.length; i++){
       $('stAudio').textContent = '🔍 Leyendo página ' + (i+1) + ' de ' + imgs.length + ' (OCR)…';
@@ -1188,6 +1195,17 @@ async function generarPPT(){
       pesos.push(Math.max(20, texto.length));
       datos.push({img: b64aU8(durl.split(',')[1]), w: el.naturalWidth, h: el.naturalHeight});
     }
+    /* Si el libro ya está cargado y validado en la pestaña Audiolibro (parrafos), narramos
+       la presentación con ESE MISMO texto ya corregido, en vez del OCR independiente que
+       acabamos de repetir arriba. Así el audio del PPT siempre coincide con el del MP3 y
+       con lo que se ve en pantalla, y no se cuelan caracteres sueltos de una segunda pasada
+       de OCR (Tesseract no es 100% determinista entre ejecuciones). El OCR de arriba solo
+       se usa para estimar cuánto texto trae cada página (peso), no como texto a narrar. */
+    if (parrafos.length){
+      var textoValidado = [];
+      for (var pv = 0; pv < parrafos.length; pv++) textoValidado.push(parrafos[pv].textContent);
+      textos = partirTextoPorPesos(textoValidado.join(' '), pesos);
+    }
     var items = [];
     if (conMp3){
       var segs = null;
@@ -1198,7 +1216,6 @@ async function generarPPT(){
         await new Promise(function(r){ setTimeout(r, 1500); });
         conMp3 = false;
         pptMp3Archivo = null;
-        await prepararTTS();
       }
       if (segs){
         for (var a1 = 0; a1 < datos.length; a1++){
@@ -1212,7 +1229,7 @@ async function generarPPT(){
         if (textos[a2]){
           $('stAudio').textContent = '🎤 Narrando diapositiva ' + (a2+1) + ' de ' + datos.length + '…';
           await new Promise(function(r){ setTimeout(r, 0); });
-          var sm = sintetizarMp3Texto(textos[a2]);
+          var sm = await sintetizarMp3Texto(textos[a2], vozActual().id, $('rate').value);
           audioU8 = sm.u8; durMs = sm.durMs;
         }
         items.push({img: datos[a2].img, w: datos[a2].w, h: datos[a2].h, audio: audioU8, durMs: durMs});
@@ -1241,11 +1258,6 @@ async function generarPPT(){
 function init(){
   mostrarBienvenida();
   cargarVoces();
-  if (TTS && typeof window.speechSynthesis.addEventListener === 'function'){
-    window.speechSynthesis.addEventListener('voiceschanged', cargarVoces);
-  } else if (TTS) {
-    window.speechSynthesis.onvoiceschanged = cargarVoces;
-  }
 
   $('selVoz').onchange = function(){ lsSet('vozLibro', this.value); };
   $('rate').oninput = function(){ $('rateVal').textContent = parseFloat(this.value).toFixed(2); lsSet('rateLibro', this.value); };
@@ -1255,9 +1267,9 @@ function init(){
   $('btnPlay').onclick = function(){ iniciar(idxActual < 0 ? 0 : idxActual); };
   $('btnStop').onclick = function(){ detener(); idxActual = -1; $('stAudio').textContent = 'Detenido.'; };
   $('btnPause').onclick = function(){
-    if (!TTS) return;
-    if (!pausado){ pausado = true; window.speechSynthesis.pause(); this.textContent = '▶ Continuar'; $('stAudio').textContent = 'En pausa.'; }
-    else { pausado = false; window.speechSynthesis.resume(); this.textContent = '⏸ Pausa'; }
+    if (!audioActual) return;
+    if (!pausado){ pausado = true; audioActual.pause(); this.textContent = '▶ Continuar'; $('stAudio').textContent = 'En pausa.'; }
+    else { pausado = false; audioActual.play(); this.textContent = '⏸ Pausa'; }
   };
   $('selLibro').onchange = function(){ cargarLibroSel(this.value); };
   $('btnMp3Gen').onclick = generarMp3;
@@ -1289,7 +1301,7 @@ function init(){
     }
   });
 
-  window.addEventListener('beforeunload', function(){ if (TTS) window.speechSynthesis.cancel(); });
+  window.addEventListener('beforeunload', function(){ detenerAudioActual(); });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
